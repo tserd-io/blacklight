@@ -2,10 +2,10 @@
 
 Milestone 1 focuses on making the project easy to run, inspect, and trust from a fresh clone. These tickets are scoped so each can be implemented independently.
 
-## 1. Add CLI Entry Points For Classify, Eval, And Metrics
+## 1. Add CLI Entry Points For Platform Workflows
 
 Purpose:
-Expose the platform through simple commands, not only Python modules, so the MVP workflow is easy to demonstrate.
+Expose the platform through simple commands, not only Python modules, so the MVP workflow is easy to demonstrate and inspect.
 
 Tasks:
 
@@ -13,6 +13,11 @@ Tasks:
 - Add `llm-platform classify`.
 - Add `llm-platform eval`.
 - Add `llm-platform metrics`.
+- Add `llm-platform health`.
+- Add `llm-platform prompts list`.
+- Add `llm-platform prompts show`.
+- Add `llm-platform trace list`.
+- Add `llm-platform trace show`.
 - Keep command output JSON-friendly.
 
 Acceptance criteria:
@@ -20,6 +25,9 @@ Acceptance criteria:
 - `llm-platform classify --subject "Refund" --body "Duplicate charge"` returns valid JSON.
 - `llm-platform eval` returns an eval summary.
 - `llm-platform metrics` works against the configured SQLite trace DB.
+- `llm-platform health` reports local runtime configuration without requiring live API keys.
+- `llm-platform prompts list` and `llm-platform prompts show ticket_classifier` expose prompt registry metadata.
+- `llm-platform trace list` and `llm-platform trace show <request_id>` expose recent trace records from SQLite.
 - Tests cover the CLI commands without requiring live API keys.
 
 Suggested labels:

@@ -25,6 +25,9 @@ dev = [
   "ruff>=0.5",
 ]
 
+[project.scripts]
+llm-platform = "llm_platform_starter.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

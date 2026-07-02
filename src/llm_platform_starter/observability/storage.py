@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from llm_platform_starter.models import TraceRecord
 
@@ -56,6 +57,41 @@ class TraceStore:
             "validation_failure_rate": round(row[3], 4),
         }
 
+    def list_recent(self, limit: int = 10) -> list[dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT
+                  created_at, request_id, prompt_id, prompt_version, provider, model,
+                  latency_ms, input_tokens, output_tokens, estimated_cost_usd,
+                  validation_passed, error_category
+                FROM traces
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
+    def get_by_request_id(self, request_id: str) -> dict[str, Any] | None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT
+                  created_at, request_id, prompt_id, prompt_version, provider, model,
+                  latency_ms, input_tokens, output_tokens, estimated_cost_usd,
+                  validation_passed, error_category
+                FROM traces
+                WHERE request_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (request_id,),
+            ).fetchone()
+        return self._row_to_dict(row) if row else None
+
     def _initialize(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.db_path) as conn:
@@ -78,3 +114,9 @@ class TraceStore:
                 )
                 """
             )
+
+    @staticmethod
+    def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+        payload = dict(row)
+        payload["validation_passed"] = bool(payload["validation_passed"])
+        return payload

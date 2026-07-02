@@ -27,6 +27,10 @@ class PromptRegistry:
     def __init__(self, template_dir: Path | None = None) -> None:
         self.template_dir = template_dir
 
+    def list(self) -> list[PromptTemplate]:
+        prompt_ids = self._list_prompt_ids()
+        return [self.get(prompt_id) for prompt_id in prompt_ids]
+
     def get(self, prompt_id: str, version: int | None = None) -> PromptTemplate:
         templates = self._load_prompt_file(prompt_id)
         if version is None:
@@ -58,3 +62,10 @@ class PromptRegistry:
             ).read_text(encoding="utf-8")
         payload = json.loads(raw)
         return payload["versions"]
+
+    def _list_prompt_ids(self) -> list[str]:
+        if self.template_dir:
+            paths = self.template_dir.glob("*.json")
+            return sorted(path.stem for path in paths)
+        template_root = resources.files("llm_platform_starter.prompts.templates")
+        return sorted(path.name.removesuffix(".json") for path in template_root.iterdir())
