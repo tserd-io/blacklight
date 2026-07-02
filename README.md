@@ -43,6 +43,33 @@ Run evals:
 python -m llm_platform_starter.evals.runner
 ```
 
+## Provider Configuration
+
+The default provider is the deterministic local mock:
+
+```bash
+set LLM_PROVIDER=mock
+```
+
+To use OpenAI, install the optional dependency and configure an API key:
+
+```bash
+pip install -e ".[openai]"
+set LLM_PROVIDER=openai
+set OPENAI_API_KEY=...
+```
+
+To use your own provider, implement `LLMProvider` and point `LLM_CUSTOM_PROVIDER` at an import path:
+
+```bash
+set LLM_PROVIDER=custom
+set LLM_CUSTOM_PROVIDER=my_package.providers:MyProvider
+```
+
+The import path can resolve to an `LLMProvider` subclass, an instance, or a zero-argument factory that returns one.
+
+For local model servers such as Ollama, LM Studio, llama.cpp, or a private localhost endpoint, use the same custom provider path. See [docs/provider-configuration.md](docs/provider-configuration.md) for a local HTTP adapter example and later smoke-test guidance.
+
 ## Architecture
 
 ```mermaid

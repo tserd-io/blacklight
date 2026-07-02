@@ -9,7 +9,7 @@ from llm_platform_starter.examples.ticket_classifier import TicketClassifier
 from llm_platform_starter.models import TicketRequest
 from llm_platform_starter.observability.storage import TraceStore
 from llm_platform_starter.prompts.registry import PromptRegistry
-from llm_platform_starter.providers.mock import MockProvider
+from llm_platform_starter.providers.factory import create_provider
 from llm_platform_starter.settings import load_settings
 
 
@@ -21,7 +21,7 @@ def classify(args: argparse.Namespace) -> int:
     settings = load_settings()
     trace_store = TraceStore(args.trace_db_path or settings.trace_db_path)
     classifier = TicketClassifier(
-        provider=MockProvider(),
+        provider=create_provider(settings),
         model=settings.model,
         trace_store=trace_store,
     )
@@ -50,6 +50,7 @@ def health(_args: argparse.Namespace) -> int:
             "model": settings.model,
             "trace_db_path": settings.trace_db_path,
             "openai_configured": bool(settings.openai_api_key),
+            "custom_provider_configured": bool(settings.custom_provider_path),
         }
     )
     return 0

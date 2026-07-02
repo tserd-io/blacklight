@@ -65,6 +65,7 @@ def test_health_command_prints_runtime_config(capsys):
     assert payload["provider"] == "mock"
     assert payload["model"] == "mock-ticket-classifier"
     assert payload["openai_configured"] is False
+    assert payload["custom_provider_configured"] is False
 
 
 def test_prompts_list_command_prints_prompt_metadata(capsys):

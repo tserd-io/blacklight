@@ -46,12 +46,14 @@ Tasks:
 - Add a provider factory module.
 - Support `mock` by default.
 - Support `openai` only when configured.
+- Support user-owned providers through a custom import path.
 - Raise clear errors for unknown providers or missing API key.
 - Update API and example flows to use the factory where appropriate.
 
 Acceptance criteria:
 
 - Tests cover mock provider creation.
+- Tests cover custom provider creation.
 - Tests cover unsupported provider errors.
 - OpenAI provider is never required for CI.
 - Configuration remains simple for local mock-mode usage.

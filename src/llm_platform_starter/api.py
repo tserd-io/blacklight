@@ -5,13 +5,13 @@ from fastapi import FastAPI
 from llm_platform_starter.examples.ticket_classifier import TicketClassifier
 from llm_platform_starter.models import TicketClassification, TicketRequest
 from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.providers.mock import MockProvider
+from llm_platform_starter.providers.factory import create_provider
 from llm_platform_starter.settings import load_settings
 
 settings = load_settings()
 trace_store = TraceStore(settings.trace_db_path)
 classifier = TicketClassifier(
-    provider=MockProvider(),
+    provider=create_provider(settings),
     model=settings.model,
     trace_store=trace_store,
 )
