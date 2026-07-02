@@ -13,7 +13,7 @@ Each milestone ends with a final QA and approval ticket. That gate is meant to k
 
 ### Milestone 1: Runnable MVP
 
-- [#1 Add CLI Entry Points For Classify, Eval, And Metrics](https://github.com/tserd-io/llm-platform-starter/issues/1)
+- [#1 Add CLI Entry Points For Platform Workflows](https://github.com/tserd-io/llm-platform-starter/issues/1)
 - [#2 Add Provider Factory](https://github.com/tserd-io/llm-platform-starter/issues/2)
 - [#3 Add Retry And Timeout Wrapper](https://github.com/tserd-io/llm-platform-starter/issues/3)
 - [#4 Improve Eval Report](https://github.com/tserd-io/llm-platform-starter/issues/4)
@@ -39,3 +39,4 @@ Each milestone ends with a final QA and approval ticket. That gate is meant to k
 - [#15 Final CI Cleanup](https://github.com/tserd-io/llm-platform-starter/issues/15)
 - [#16 Prepare v0.1 Release](https://github.com/tserd-io/llm-platform-starter/issues/16)
 - [#17 Milestone 4 Final QA And Release Approval](https://github.com/tserd-io/llm-platform-starter/issues/17)
+- [#19 Add Provider Configuration Smoke Tests](https://github.com/tserd-io/llm-platform-starter/issues/19)

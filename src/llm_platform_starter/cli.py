@@ -50,6 +50,7 @@ def health(_args: argparse.Namespace) -> int:
             "model": settings.model,
             "trace_db_path": settings.trace_db_path,
             "openai_configured": bool(settings.openai_api_key),
+            "custom_provider_configured": bool(settings.custom_provider_path),
         }
     )
     return 0

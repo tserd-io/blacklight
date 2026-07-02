@@ -108,3 +108,33 @@ Suggested labels:
 - `qa`
 - `release`
 - `mvp`
+
+## Candidate. Add Provider Configuration Smoke Tests
+
+Purpose:
+Verify that the provider factory works against real provider configurations without making live provider access required for CI.
+
+Tasks:
+
+- Add opt-in smoke tests for `mock`, `openai`, and `custom` provider configuration paths.
+- Add an opt-in smoke test path for local LLM endpoints, such as Ollama, LM Studio, llama.cpp, vLLM, or a private localhost service.
+- Gate live provider tests behind explicit environment flags.
+- Document required environment variables for each smoke-test mode.
+- Ensure default CI still runs with mock mode only and requires no secrets or local model runtime.
+- Record skipped smoke-test reasons clearly when required configuration is absent.
+
+Acceptance criteria:
+
+- Mock provider smoke tests run in normal CI.
+- OpenAI smoke tests run only when an explicit flag and API key are present.
+- Custom provider smoke tests can target a real import path via `LLM_CUSTOM_PROVIDER`.
+- Local endpoint smoke tests can target a real local runtime without changing application code.
+- Skipped live-config tests are reported clearly and do not fail CI.
+- Provider smoke-test instructions are documented.
+
+Suggested labels:
+
+- `qa`
+- `provider-gateway`
+- `developer-experience`
+- `release`
