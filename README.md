@@ -73,10 +73,6 @@ The included example classifies synthetic support tickets into:
 
 The output schema also captures severity, confidence, and whether a human review is needed.
 
-## Portfolio Positioning
-
-This is not a toy chatbot. It is a compact platform slice showing how a senior AI/data platform engineer thinks about repeatability, versioning, reliability, evaluation, operational metadata, and public-safe delivery.
-
 ## Project Status
 
 MVP scaffold complete:
