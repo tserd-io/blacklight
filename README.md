@@ -135,6 +135,14 @@ The included example classifies synthetic support tickets into:
 
 The output schema also captures severity, confidence, and whether a human review is needed.
 
+The document-extraction example shows a synthetic Pangea government RFP/work order for dignified senior housing. It converts the work order into an invoice-style materials list and routes accepted, needs-review, and rejected outputs through a lightweight local human-review queue:
+
+```bash
+python -m llm_platform_starter.examples.document_extraction
+```
+
+In production, the same pattern would usually write `needs_review` items to a task queue, case-management system, or reviewer dashboard while keeping rejected outputs out of automated downstream workflows.
+
 ## Public-Safe Data
 
 All examples, prompts, and eval fixtures are synthetic and public-safe. They avoid real customers, companies, private identifiers, and proprietary workflows.
