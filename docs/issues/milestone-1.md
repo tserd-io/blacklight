@@ -108,15 +108,22 @@ Tasks:
 
 - Add schema validity rate.
 - Add needs-review rate.
-- Add average latency.
-- Add estimated cost.
+- Add latency average and percentile metrics.
+- Add token usage and estimated cost metrics.
+- Add retry count and error category diagnostics.
+- Add category-level accuracy breakdown.
+- Store eval run and per-case metrics in SQLite with session identifiers.
+- Add eval history inspection commands.
 - Add JSON report output.
 - Preserve per-case results.
 
 Acceptance criteria:
 
-- `llm-platform eval` prints summary metrics.
-- Eval report includes per-case results.
+- `llm-platform eval` prints a JSON report with one `summary` object and per-case results.
+- Summary includes accuracy, schema validity, review rate, latency, token usage, estimated cost, retry, error, and category breakdown metrics.
+- Eval report includes per-case quality, latency, token, cost, retry, and error diagnostics.
+- Eval metrics can be related to trace records by `session_id`, and per-case records include a future trace join key.
+- `llm-platform eval list` and `llm-platform eval show <eval_run_id>` expose persisted eval history and related traces.
 - Tests validate the report shape.
 - Eval execution remains deterministic with the mock provider.
 

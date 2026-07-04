@@ -57,6 +57,8 @@ class ValidationResult(BaseModel):
 
 class TraceRecord(BaseModel):
     request_id: str
+    session_id: str = "anonymous"
+    eval_run_id: str | None = None
     prompt_id: str
     prompt_version: int
     provider: str
