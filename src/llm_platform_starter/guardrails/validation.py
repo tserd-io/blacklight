@@ -5,7 +5,7 @@ import json
 from pydantic import ValidationError
 
 from llm_platform_starter.guardrails.pii import detect_pii
-from llm_platform_starter.models import TicketClassification, ValidationResult
+from llm_platform_starter.models import GuardrailOutcome, TicketClassification, ValidationResult
 
 
 def parse_ticket_classification(text: str) -> TicketClassification:
@@ -23,9 +23,16 @@ def validate_ticket_output(text: str, source_text: str = "") -> tuple[TicketClas
     pii_findings = detect_pii(source_text)
     if pii_findings and parsed:
         parsed.needs_review = True
+    if errors:
+        outcome = GuardrailOutcome.rejected
+    elif pii_findings or (parsed and parsed.needs_review):
+        outcome = GuardrailOutcome.needs_review
+    else:
+        outcome = GuardrailOutcome.accepted
 
     return parsed, ValidationResult(
-        passed=not errors and not pii_findings,
+        passed=outcome == GuardrailOutcome.accepted,
+        outcome=outcome,
         errors=errors,
         pii_findings=pii_findings,
     )

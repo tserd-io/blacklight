@@ -127,6 +127,7 @@ def test_metrics_command_reads_trace_db(capsys, tmp_path):
     assert payload["failure_rate"] == 0.0
     assert payload["by_provider"][0]["provider"] == "mock"
     assert payload["by_model"][0]["model"] == "mock-ticket-classifier"
+    assert payload["by_guardrail_outcome"][0]["guardrail_outcome"] == "accepted"
 
 
 def test_health_command_prints_runtime_config(capsys):

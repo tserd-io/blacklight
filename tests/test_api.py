@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from llm_platform_starter import api
-from llm_platform_starter.models import TraceRecord
+from llm_platform_starter.models import GuardrailOutcome, TraceRecord
 from llm_platform_starter.observability.storage import TraceStore
 
 
@@ -21,6 +21,7 @@ def test_metrics_endpoint_returns_expanded_trace_metrics(tmp_path):
             output_tokens=5,
             estimated_cost_usd=0.0,
             validation_passed=False,
+            guardrail_outcome=GuardrailOutcome.rejected,
             error_category="validation_error",
         )
     )
@@ -40,3 +41,4 @@ def test_metrics_endpoint_returns_expanded_trace_metrics(tmp_path):
     assert payload["by_provider"][0]["provider"] == "mock"
     assert payload["by_model"][0]["model"] == "mock-ticket-classifier"
     assert payload["by_provider_model"][0]["provider"] == "mock"
+    assert payload["by_guardrail_outcome"][0]["guardrail_outcome"] == "rejected"

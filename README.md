@@ -9,8 +9,8 @@ This project demonstrates the internal platform layer teams need once LLM usage 
 - Provider gateway with a deterministic mock provider and optional OpenAI provider
 - Prompt registry with versioned templates stored as JSON
 - Evaluation harness for regression checks across prompt and model versions
-- Guardrails using Pydantic schema validation and simple PII detection
-- SQLite trace logging for request, latency, token, cost, validation, and error metadata
+- Guardrails using Pydantic schema validation, simple PII detection, and accepted/review/rejected outcomes
+- SQLite trace logging for request, latency, token, cost, validation, guardrail outcome, and error metadata
 - FastAPI service surface for an example ticket-classification workflow
 - Documentation for architecture, tradeoffs, eval methodology, failure modes, and roadmap
 
@@ -101,6 +101,8 @@ Rate limiting is applied per `session_id` so one busy workflow does not throttle
 Retries reuse a stable `idempotency_key` in provider request metadata so providers can avoid duplicated side effects or repeated output across attempts. Successful ticket classifications are also cached in SQLite by idempotency key, so repeated calls across processes or restarts can return the completed result without calling the provider again. The built-in OpenAI adapter forwards this as an `Idempotency-Key` header. Custom providers should honor `request.metadata["idempotency_key"]` when their backend supports idempotency.
 
 Provider failures are categorized in trace metadata as `provider_error`, `provider_timeout`, or `provider_empty_response` when a trace store is configured. Null, empty, or whitespace-only provider outputs are retried before schema validation runs.
+
+Guardrails route model outputs into `accepted`, `needs_review`, or `rejected`. Invalid JSON and schema mismatches are rejected, while PII findings or model-requested human review are stored as `needs_review` so trace history can distinguish reviewable outputs from hard validation failures.
 
 ## Architecture
 

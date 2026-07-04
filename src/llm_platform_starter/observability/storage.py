@@ -19,9 +19,9 @@ class TraceStore:
                 INSERT INTO traces (
                   request_id, session_id, eval_run_id, prompt_id, prompt_version,
                   provider, model, latency_ms, input_tokens, output_tokens,
-                  estimated_cost_usd, validation_passed, error_category
+                  estimated_cost_usd, validation_passed, guardrail_outcome, error_category
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(request_id) DO UPDATE SET
                   session_id = excluded.session_id,
                   eval_run_id = excluded.eval_run_id,
@@ -34,6 +34,7 @@ class TraceStore:
                   output_tokens = excluded.output_tokens,
                   estimated_cost_usd = excluded.estimated_cost_usd,
                   validation_passed = excluded.validation_passed,
+                  guardrail_outcome = excluded.guardrail_outcome,
                   error_category = excluded.error_category
                 """,
                 (
@@ -49,11 +50,12 @@ class TraceStore:
                     record.output_tokens,
                     record.estimated_cost_usd,
                     int(record.validation_passed),
+                    record.guardrail_outcome.value,
                     record.error_category,
                 ),
             )
 
-    def metrics(self) -> dict[str, float | int]:
+    def metrics(self) -> dict[str, Any]:
         with sqlite3.connect(self.db_path) as conn:
             row = conn.execute(
                 """
@@ -75,6 +77,7 @@ class TraceStore:
             "by_provider": self._group_metrics(["provider"]),
             "by_model": self._group_metrics(["model"]),
             "by_provider_model": self._group_metrics(["provider", "model"]),
+            "by_guardrail_outcome": self._group_metrics(["guardrail_outcome"]),
         }
 
     def list_recent(self, limit: int = 10) -> list[dict[str, Any]]:
@@ -85,7 +88,8 @@ class TraceStore:
                 SELECT
                   created_at, request_id, session_id, eval_run_id, prompt_id,
                   prompt_version, provider, model, latency_ms, input_tokens,
-                  output_tokens, estimated_cost_usd, validation_passed, error_category
+                  output_tokens, estimated_cost_usd, validation_passed,
+                  guardrail_outcome, error_category
                 FROM traces
                 ORDER BY id DESC
                 LIMIT ?
@@ -102,7 +106,8 @@ class TraceStore:
                 SELECT
                   created_at, request_id, session_id, eval_run_id, prompt_id,
                   prompt_version, provider, model, latency_ms, input_tokens,
-                  output_tokens, estimated_cost_usd, validation_passed, error_category
+                  output_tokens, estimated_cost_usd, validation_passed,
+                  guardrail_outcome, error_category
                 FROM traces
                 WHERE request_id = ?
                 ORDER BY id DESC
@@ -120,7 +125,8 @@ class TraceStore:
                 SELECT
                   created_at, request_id, session_id, eval_run_id, prompt_id,
                   prompt_version, provider, model, latency_ms, input_tokens,
-                  output_tokens, estimated_cost_usd, validation_passed, error_category
+                  output_tokens, estimated_cost_usd, validation_passed,
+                  guardrail_outcome, error_category
                 FROM traces
                 WHERE eval_run_id = ?
                 ORDER BY id
@@ -137,7 +143,8 @@ class TraceStore:
                 SELECT
                   created_at, request_id, session_id, eval_run_id, prompt_id,
                   prompt_version, provider, model, latency_ms, input_tokens,
-                  output_tokens, estimated_cost_usd, validation_passed, error_category
+                  output_tokens, estimated_cost_usd, validation_passed,
+                  guardrail_outcome, error_category
                 FROM traces
                 WHERE session_id = ?
                 ORDER BY id DESC
@@ -167,6 +174,7 @@ class TraceStore:
                   output_tokens INTEGER NOT NULL,
                   estimated_cost_usd REAL NOT NULL,
                   validation_passed INTEGER NOT NULL,
+                  guardrail_outcome TEXT NOT NULL DEFAULT 'accepted',
                   error_category TEXT
                 )
                 """
@@ -182,6 +190,12 @@ class TraceStore:
                 table="traces",
                 column="eval_run_id",
                 definition="TEXT",
+            )
+            self._ensure_column(
+                conn,
+                table="traces",
+                column="guardrail_outcome",
+                definition="TEXT NOT NULL DEFAULT 'accepted'",
             )
             conn.execute(
                 """

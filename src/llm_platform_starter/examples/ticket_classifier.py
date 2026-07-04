@@ -5,7 +5,13 @@ import time
 import uuid
 
 from llm_platform_starter.guardrails.validation import validate_ticket_output
-from llm_platform_starter.models import ProviderRequest, TicketClassification, TicketRequest, TraceRecord
+from llm_platform_starter.models import (
+    GuardrailOutcome,
+    ProviderRequest,
+    TicketClassification,
+    TicketRequest,
+    TraceRecord,
+)
 from llm_platform_starter.observability.cost import estimate_cost
 from llm_platform_starter.observability.idempotency import (
     IdempotencyInProgressError,
@@ -60,6 +66,7 @@ class TicketClassifier:
         started = time.perf_counter()
         error_category: str | None = None
         validation_passed = False
+        guardrail_outcome = GuardrailOutcome.rejected
         try:
             if self.idempotency_store:
                 cached = self.idempotency_store.get_ticket_classification(idempotency_key)
@@ -98,6 +105,7 @@ class TicketClassifier:
                 source_text=f"{ticket.subject}\n{ticket.body}",
             )
             validation_passed = validation.passed
+            guardrail_outcome = validation.outcome
             if parsed is None:
                 error_category = "validation_error"
                 raise ValueError("; ".join(validation.errors))
@@ -134,6 +142,7 @@ class TicketClassifier:
                                 response.output_tokens,
                             ),
                             validation_passed=validation_passed,
+                            guardrail_outcome=guardrail_outcome,
                             error_category=error_category,
                         )
                     )
@@ -151,6 +160,7 @@ class TicketClassifier:
                             output_tokens=0,
                             estimated_cost_usd=0,
                             validation_passed=False,
+                            guardrail_outcome=guardrail_outcome,
                             error_category=error_category,
                         )
                     )

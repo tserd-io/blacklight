@@ -19,6 +19,12 @@ class Severity(str, Enum):
     high = "high"
 
 
+class GuardrailOutcome(str, Enum):
+    accepted = "accepted"
+    needs_review = "needs_review"
+    rejected = "rejected"
+
+
 class ProviderRequest(BaseModel):
     prompt: str
     model: str
@@ -51,6 +57,7 @@ class TicketRequest(BaseModel):
 
 class ValidationResult(BaseModel):
     passed: bool
+    outcome: GuardrailOutcome
     errors: list[str] = Field(default_factory=list)
     pii_findings: list[str] = Field(default_factory=list)
 
@@ -68,4 +75,5 @@ class TraceRecord(BaseModel):
     output_tokens: int
     estimated_cost_usd: float
     validation_passed: bool
+    guardrail_outcome: GuardrailOutcome = GuardrailOutcome.accepted
     error_category: str | None = None
