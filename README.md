@@ -23,6 +23,12 @@ pip install -e ".[dev,api]"
 pytest
 ```
 
+Check the local runtime:
+
+```bash
+llm-platform health
+```
+
 Run the API:
 
 ```bash
@@ -40,7 +46,14 @@ curl -X POST http://127.0.0.1:8000/classify-ticket ^
 Run evals:
 
 ```bash
-python -m llm_platform_starter.evals.runner
+llm-platform eval
+```
+
+Inspect persisted eval history:
+
+```bash
+llm-platform eval list
+llm-platform eval show <eval_run_id>
 ```
 
 ## Provider Configuration
