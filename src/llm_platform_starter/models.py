@@ -45,6 +45,8 @@ class TicketClassification(BaseModel):
 class TicketRequest(BaseModel):
     subject: str
     body: str
+    session_id: str | None = None
+    idempotency_key: str | None = None
 
 
 class ValidationResult(BaseModel):

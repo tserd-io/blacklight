@@ -8,7 +8,14 @@ from llm_platform_starter.settings import load_settings
 
 def main() -> None:
     settings = load_settings()
-    classifier = TicketClassifier(provider=create_provider(settings), model=settings.model)
+    classifier = TicketClassifier(
+        provider=create_provider(settings),
+        model=settings.model,
+        provider_timeout_seconds=settings.provider_timeout_seconds,
+        provider_max_retries=settings.provider_max_retries,
+        provider_rate_limit_requests=settings.provider_rate_limit_requests,
+        provider_rate_limit_window_seconds=settings.provider_rate_limit_window_seconds,
+    )
     result = classifier.classify(
         TicketRequest(
             subject="Duplicate invoice charge",
