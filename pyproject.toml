@@ -16,6 +16,7 @@ dependencies = [
 api = [
   "fastapi>=0.111",
   "uvicorn>=0.30",
+  "httpx>=0.28",
 ]
 openai = [
   "openai>=1.40",

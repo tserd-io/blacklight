@@ -61,6 +61,7 @@ class TraceStore:
                   COUNT(*),
                   COALESCE(AVG(latency_ms), 0),
                   COALESCE(SUM(estimated_cost_usd), 0),
+                  COALESCE(AVG(CASE WHEN error_category IS NOT NULL THEN 1.0 ELSE 0.0 END), 0),
                   COALESCE(AVG(CASE WHEN validation_passed = 0 THEN 1.0 ELSE 0.0 END), 0)
                 FROM traces
                 """
@@ -69,7 +70,11 @@ class TraceStore:
             "request_count": row[0],
             "avg_latency_ms": round(row[1], 2),
             "total_estimated_cost_usd": round(row[2], 8),
-            "validation_failure_rate": round(row[3], 4),
+            "failure_rate": round(row[3], 4),
+            "validation_failure_rate": round(row[4], 4),
+            "by_provider": self._group_metrics(["provider"]),
+            "by_model": self._group_metrics(["model"]),
+            "by_provider_model": self._group_metrics(["provider", "model"]),
         }
 
     def list_recent(self, limit: int = 10) -> list[dict[str, Any]]:
@@ -121,6 +126,24 @@ class TraceStore:
                 ORDER BY id
                 """,
                 (eval_run_id,),
+            ).fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
+    def list_by_session_id(self, session_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT
+                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  prompt_version, provider, model, latency_ms, input_tokens,
+                  output_tokens, estimated_cost_usd, validation_passed, error_category
+                FROM traces
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (session_id, limit),
             ).fetchall()
         return [self._row_to_dict(row) for row in rows]
 
@@ -193,6 +216,29 @@ class TraceStore:
             """
         )
 
+    def _group_metrics(self, columns: list[str]) -> list[dict[str, Any]]:
+        select_columns = ", ".join(columns)
+        group_columns = ", ".join(columns)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"""
+                SELECT
+                  {select_columns},
+                  COUNT(*) AS request_count,
+                  COALESCE(AVG(latency_ms), 0) AS avg_latency_ms,
+                  COALESCE(SUM(estimated_cost_usd), 0) AS total_estimated_cost_usd,
+                  COALESCE(AVG(CASE WHEN error_category IS NOT NULL THEN 1.0 ELSE 0.0 END), 0)
+                    AS failure_rate,
+                  COALESCE(AVG(CASE WHEN validation_passed = 0 THEN 1.0 ELSE 0.0 END), 0)
+                    AS validation_failure_rate
+                FROM traces
+                GROUP BY {group_columns}
+                ORDER BY request_count DESC, {group_columns}
+                """
+            ).fetchall()
+        return [self._metric_row_to_dict(row) for row in rows]
+
     @staticmethod
     def _ensure_column(
         conn: sqlite3.Connection,
@@ -212,4 +258,13 @@ class TraceStore:
     def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         payload = dict(row)
         payload["validation_passed"] = bool(payload["validation_passed"])
+        return payload
+
+    @staticmethod
+    def _metric_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+        payload = dict(row)
+        payload["avg_latency_ms"] = round(payload["avg_latency_ms"], 2)
+        payload["total_estimated_cost_usd"] = round(payload["total_estimated_cost_usd"], 8)
+        payload["failure_rate"] = round(payload["failure_rate"], 4)
+        payload["validation_failure_rate"] = round(payload["validation_failure_rate"], 4)
         return payload
