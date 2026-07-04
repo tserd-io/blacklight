@@ -94,13 +94,43 @@ Then run the same platform surface:
 llm-platform classify --subject "Login error" --body "The export page fails after login."
 ```
 
-## Later Real-Config Testing
+## Provider Smoke Tests
 
-For a later milestone, add smoke tests that are skipped unless explicit environment variables are present, for example:
+Provider configuration smoke tests live in `tests/test_provider_configuration_smoke.py`.
 
-- `RUN_LOCAL_PROVIDER_SMOKE=1`
-- `LLM_PROVIDER=custom`
-- `LLM_MODEL=<local model name>`
-- `LLM_CUSTOM_PROVIDER=<module:provider>`
+The mock provider smoke test runs in normal CI and requires no secrets:
 
-Those tests should verify the API and CLI surfaces against a real local endpoint without making local model setup required for CI.
+```bash
+pytest tests/test_provider_configuration_smoke.py
+```
+
+Live provider smoke tests are opt-in and skip with a clear reason unless their flags and configuration are present.
+
+OpenAI:
+
+```bash
+set RUN_OPENAI_PROVIDER_SMOKE=1
+set OPENAI_API_KEY=...
+set LLM_MODEL=gpt-4o-mini
+pytest tests/test_provider_configuration_smoke.py
+```
+
+Custom provider:
+
+```bash
+set RUN_CUSTOM_PROVIDER_SMOKE=1
+set LLM_CUSTOM_PROVIDER=my_project.providers:MyProvider
+set LLM_MODEL=my-model
+pytest tests/test_provider_configuration_smoke.py
+```
+
+Local endpoint provider:
+
+```bash
+set RUN_LOCAL_PROVIDER_SMOKE=1
+set LLM_CUSTOM_PROVIDER=my_project.local_provider:LocalHTTPProvider
+set LLM_MODEL=llama3.1
+pytest tests/test_provider_configuration_smoke.py
+```
+
+The local endpoint path uses the same `custom` provider contract, so Ollama, LM Studio, llama.cpp, vLLM, Transformers, or a private localhost service can be smoke-tested without changing application code.

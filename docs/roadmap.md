@@ -38,8 +38,6 @@ Milestone 2 is complete as an observability and guardrail hardening pass. The pr
   - [Milestone 3: Portfolio-Grade Documentation](issues/milestone-3.md)
   - [Milestone 4: Packaging And Release](issues/milestone-4.md)
 - Add prompt version comparison report
-- Add OpenAI smoke test behind an environment flag
-- Add local custom-provider smoke tests behind an environment flag
 - Add architecture screenshots or terminal examples to the README
 - Add a lightweight Dockerfile
 
