@@ -45,6 +45,5 @@ Milestone 2 is complete as an observability and guardrail hardening pass. The pr
 
 - Add Azure OpenAI provider
 - Add OpenTelemetry export
-- Add human-review queue example
 - Add RAG policy-question example
 - Add deployment notes for container platforms
