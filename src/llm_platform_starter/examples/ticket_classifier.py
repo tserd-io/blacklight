@@ -120,6 +120,7 @@ class TicketClassifier:
                     self.trace_store.insert(
                         TraceRecord(
                             request_id=request_id,
+                            session_id=ticket.session_id or "anonymous",
                             prompt_id=self.prompt_id,
                             prompt_version=prompt_template.version,
                             provider=response.provider,
@@ -140,6 +141,7 @@ class TicketClassifier:
                     self.trace_store.insert(
                         TraceRecord(
                             request_id=request_id,
+                            session_id=ticket.session_id or "anonymous",
                             prompt_id=self.prompt_id,
                             prompt_version=prompt_template.version,
                             provider=self.provider.name,

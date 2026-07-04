@@ -7,6 +7,7 @@ from typing import Any
 from llm_platform_starter.evals.runner import run_ticket_classification_eval
 from llm_platform_starter.examples.ticket_classifier import TicketClassifier
 from llm_platform_starter.models import TicketRequest
+from llm_platform_starter.observability.evaluations import EvalMetricStore
 from llm_platform_starter.observability.idempotency import IdempotencyStore
 from llm_platform_starter.observability.storage import TraceStore
 from llm_platform_starter.prompts.registry import PromptRegistry
@@ -44,8 +45,40 @@ def classify(args: argparse.Namespace) -> int:
     return 0
 
 
-def eval_command(_args: argparse.Namespace) -> int:
-    _print_json(run_ticket_classification_eval())
+def eval_run(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    db_path = args.trace_db_path or settings.trace_db_path
+    eval_store = EvalMetricStore(db_path)
+    trace_store = TraceStore(db_path)
+    _print_json(
+        run_ticket_classification_eval(
+            session_id=args.session_id,
+            eval_store=eval_store,
+            trace_store=trace_store,
+        )
+    )
+    return 0
+
+
+def eval_list(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    eval_store = EvalMetricStore(args.trace_db_path or settings.trace_db_path)
+    _print_json({"eval_runs": eval_store.list_runs(limit=args.limit)})
+    return 0
+
+
+def eval_show(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    db_path = args.trace_db_path or settings.trace_db_path
+    eval_store = EvalMetricStore(db_path)
+    trace_store = TraceStore(db_path)
+    run = eval_store.get_run(args.eval_run_id)
+    _print_json(
+        {
+            "eval_run": run,
+            "traces": trace_store.list_by_eval_run_id(args.eval_run_id),
+        }
+    )
     return 0
 
 
@@ -150,8 +183,47 @@ def build_parser() -> argparse.ArgumentParser:
     )
     classify_parser.set_defaults(func=classify)
 
-    eval_parser = subparsers.add_parser("eval", help="Run deterministic ticket evals.")
-    eval_parser.set_defaults(func=eval_command)
+    eval_parser = subparsers.add_parser("eval", help="Run and inspect deterministic ticket evals.")
+    eval_parser.add_argument(
+        "--session-id",
+        default="eval",
+        help="Session id stored with eval metrics so reports can be related to traces.",
+    )
+    eval_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite metrics database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
+    eval_run_parser = eval_subparsers.add_parser("run", help="Run deterministic ticket evals.")
+    eval_run_parser.add_argument(
+        "--session-id",
+        default="eval",
+        help="Session id stored with eval metrics so reports can be related to traces.",
+    )
+    eval_run_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite metrics database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    eval_run_parser.set_defaults(func=eval_run)
+    eval_list_parser = eval_subparsers.add_parser("list", help="List persisted eval runs.")
+    eval_list_parser.add_argument("--limit", type=int, default=10, help="Maximum eval runs to return.")
+    eval_list_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite metrics database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    eval_list_parser.set_defaults(func=eval_list)
+    eval_show_parser = eval_subparsers.add_parser("show", help="Show one eval run with traces.")
+    eval_show_parser.add_argument("eval_run_id", help="Eval run id to inspect.")
+    eval_show_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite metrics database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    eval_show_parser.set_defaults(func=eval_show)
+    eval_parser.set_defaults(func=eval_run)
 
     metrics_parser = subparsers.add_parser("metrics", help="Print trace database metrics.")
     metrics_parser.add_argument(

@@ -17,14 +17,29 @@ class TraceStore:
             conn.execute(
                 """
                 INSERT INTO traces (
-                  request_id, prompt_id, prompt_version, provider, model, latency_ms,
-                  input_tokens, output_tokens, estimated_cost_usd, validation_passed,
-                  error_category
+                  request_id, session_id, eval_run_id, prompt_id, prompt_version,
+                  provider, model, latency_ms, input_tokens, output_tokens,
+                  estimated_cost_usd, validation_passed, error_category
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(request_id) DO UPDATE SET
+                  session_id = excluded.session_id,
+                  eval_run_id = excluded.eval_run_id,
+                  prompt_id = excluded.prompt_id,
+                  prompt_version = excluded.prompt_version,
+                  provider = excluded.provider,
+                  model = excluded.model,
+                  latency_ms = excluded.latency_ms,
+                  input_tokens = excluded.input_tokens,
+                  output_tokens = excluded.output_tokens,
+                  estimated_cost_usd = excluded.estimated_cost_usd,
+                  validation_passed = excluded.validation_passed,
+                  error_category = excluded.error_category
                 """,
                 (
                     record.request_id,
+                    record.session_id,
+                    record.eval_run_id,
                     record.prompt_id,
                     record.prompt_version,
                     record.provider,
@@ -63,9 +78,9 @@ class TraceStore:
             rows = conn.execute(
                 """
                 SELECT
-                  created_at, request_id, prompt_id, prompt_version, provider, model,
-                  latency_ms, input_tokens, output_tokens, estimated_cost_usd,
-                  validation_passed, error_category
+                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  prompt_version, provider, model, latency_ms, input_tokens,
+                  output_tokens, estimated_cost_usd, validation_passed, error_category
                 FROM traces
                 ORDER BY id DESC
                 LIMIT ?
@@ -80,9 +95,9 @@ class TraceStore:
             row = conn.execute(
                 """
                 SELECT
-                  created_at, request_id, prompt_id, prompt_version, provider, model,
-                  latency_ms, input_tokens, output_tokens, estimated_cost_usd,
-                  validation_passed, error_category
+                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  prompt_version, provider, model, latency_ms, input_tokens,
+                  output_tokens, estimated_cost_usd, validation_passed, error_category
                 FROM traces
                 WHERE request_id = ?
                 ORDER BY id DESC
@@ -91,6 +106,23 @@ class TraceStore:
                 (request_id,),
             ).fetchone()
         return self._row_to_dict(row) if row else None
+
+    def list_by_eval_run_id(self, eval_run_id: str) -> list[dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT
+                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  prompt_version, provider, model, latency_ms, input_tokens,
+                  output_tokens, estimated_cost_usd, validation_passed, error_category
+                FROM traces
+                WHERE eval_run_id = ?
+                ORDER BY id
+                """,
+                (eval_run_id,),
+            ).fetchall()
+        return [self._row_to_dict(row) for row in rows]
 
     def _initialize(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -101,6 +133,8 @@ class TraceStore:
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
                   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                   request_id TEXT NOT NULL,
+                  session_id TEXT NOT NULL DEFAULT 'anonymous',
+                  eval_run_id TEXT,
                   prompt_id TEXT NOT NULL,
                   prompt_version INTEGER NOT NULL,
                   provider TEXT NOT NULL,
@@ -114,6 +148,65 @@ class TraceStore:
                 )
                 """
             )
+            self._ensure_column(
+                conn,
+                table="traces",
+                column="session_id",
+                definition="TEXT NOT NULL DEFAULT 'anonymous'",
+            )
+            self._ensure_column(
+                conn,
+                table="traces",
+                column="eval_run_id",
+                definition="TEXT",
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_traces_eval_run_id
+                ON traces(eval_run_id)
+                """
+            )
+            self._dedupe_by_key(conn, table="traces", key_columns=["request_id"])
+            conn.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_traces_request_id
+                ON traces(request_id)
+                """
+            )
+
+    @staticmethod
+    def _dedupe_by_key(
+        conn: sqlite3.Connection,
+        *,
+        table: str,
+        key_columns: list[str],
+    ) -> None:
+        partition = ", ".join(key_columns)
+        conn.execute(
+            f"""
+            DELETE FROM {table}
+            WHERE id NOT IN (
+              SELECT MAX(id)
+              FROM {table}
+              GROUP BY {partition}
+            )
+            """
+        )
+
+    @staticmethod
+    def _ensure_column(
+        conn: sqlite3.Connection,
+        *,
+        table: str,
+        column: str,
+        definition: str,
+    ) -> None:
+        columns = {
+            row[1]
+            for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:

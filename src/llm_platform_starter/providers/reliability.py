@@ -115,7 +115,15 @@ def complete_with_retries(
                 timeout_seconds=timeout_seconds,
             )
             _raise_for_empty_response(response)
-            return response
+            return response.model_copy(
+                update={
+                    "metadata": {
+                        **response.metadata,
+                        "provider_attempts": attempt,
+                        "retry_count": attempt - 1,
+                    }
+                }
+            )
         except TimeoutError as exc:
             last_error = exc
             last_category = "provider_timeout"
