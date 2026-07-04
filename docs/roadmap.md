@@ -22,10 +22,19 @@ Milestone 1 is complete as a runnable MVP. The project now supports:
 - richer eval reports with persisted run/case metrics and per-case trace links
 - deterministic mock-mode tests and smoke-checkable API/CLI workflows
 
+## Milestone 2 Completion
+
+Milestone 2 is complete as an observability and guardrail hardening pass. The project now supports:
+
+- expanded trace queries and metrics by provider, model, provider/model pair, and guardrail outcome
+- persisted eval summaries, per-case diagnostics, session IDs, and trace links for run review
+- guardrail routing outcomes for accepted, needs-review, and rejected model outputs
+- public-safe synthetic fixtures with a lightweight regression check for obvious private identifiers
+- passing test, lint, observability smoke, and guardrail outcome smoke checks
+
 ## Next
 
 - Complete the public [issue ticket packages](issues/index.md):
-  - [Milestone 2: Observability And Guardrails](issues/milestone-2.md)
   - [Milestone 3: Portfolio-Grade Documentation](issues/milestone-3.md)
   - [Milestone 4: Packaging And Release](issues/milestone-4.md)
 - Add prompt version comparison report
