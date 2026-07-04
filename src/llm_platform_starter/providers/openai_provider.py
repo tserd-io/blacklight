@@ -15,9 +15,14 @@ class OpenAIProvider(LLMProvider):
         self.client = OpenAI(api_key=api_key)
 
     def complete(self, request: ProviderRequest) -> ProviderResponse:
+        extra_headers = {}
+        idempotency_key = request.metadata.get("idempotency_key")
+        if idempotency_key:
+            extra_headers["Idempotency-Key"] = str(idempotency_key)
         response = self.client.responses.create(
             model=request.model,
             input=request.prompt,
+            extra_headers=extra_headers or None,
         )
         usage = getattr(response, "usage", None)
         return ProviderResponse(

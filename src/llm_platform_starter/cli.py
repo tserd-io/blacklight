@@ -7,6 +7,7 @@ from typing import Any
 from llm_platform_starter.evals.runner import run_ticket_classification_eval
 from llm_platform_starter.examples.ticket_classifier import TicketClassifier
 from llm_platform_starter.models import TicketRequest
+from llm_platform_starter.observability.idempotency import IdempotencyStore
 from llm_platform_starter.observability.storage import TraceStore
 from llm_platform_starter.prompts.registry import PromptRegistry
 from llm_platform_starter.providers.factory import create_provider
@@ -20,12 +21,25 @@ def _print_json(payload: dict[str, Any]) -> None:
 def classify(args: argparse.Namespace) -> int:
     settings = load_settings()
     trace_store = TraceStore(args.trace_db_path or settings.trace_db_path)
+    idempotency_store = IdempotencyStore(args.trace_db_path or settings.trace_db_path)
     classifier = TicketClassifier(
         provider=create_provider(settings),
         model=settings.model,
         trace_store=trace_store,
+        idempotency_store=idempotency_store,
+        provider_timeout_seconds=settings.provider_timeout_seconds,
+        provider_max_retries=settings.provider_max_retries,
+        provider_rate_limit_requests=settings.provider_rate_limit_requests,
+        provider_rate_limit_window_seconds=settings.provider_rate_limit_window_seconds,
     )
-    result = classifier.classify(TicketRequest(subject=args.subject, body=args.body))
+    result = classifier.classify(
+        TicketRequest(
+            subject=args.subject,
+            body=args.body,
+            session_id=args.session_id,
+            idempotency_key=args.idempotency_key,
+        )
+    )
     _print_json(result.model_dump(mode="json"))
     return 0
 
@@ -51,6 +65,10 @@ def health(_args: argparse.Namespace) -> int:
             "trace_db_path": settings.trace_db_path,
             "openai_configured": bool(settings.openai_api_key),
             "custom_provider_configured": bool(settings.custom_provider_path),
+            "provider_timeout_seconds": settings.provider_timeout_seconds,
+            "provider_max_retries": settings.provider_max_retries,
+            "provider_rate_limit_requests": settings.provider_rate_limit_requests,
+            "provider_rate_limit_window_seconds": settings.provider_rate_limit_window_seconds,
         }
     )
     return 0
@@ -115,6 +133,16 @@ def build_parser() -> argparse.ArgumentParser:
     classify_parser = subparsers.add_parser("classify", help="Classify a support ticket.")
     classify_parser.add_argument("--subject", required=True, help="Support ticket subject.")
     classify_parser.add_argument("--body", required=True, help="Support ticket body.")
+    classify_parser.add_argument(
+        "--session-id",
+        default="cli",
+        help="Session or user id used for per-session provider rate limiting.",
+    )
+    classify_parser.add_argument(
+        "--idempotency-key",
+        default=None,
+        help="Optional caller-provided idempotency key for durable duplicate suppression.",
+    )
     classify_parser.add_argument(
         "--trace-db-path",
         default=None,

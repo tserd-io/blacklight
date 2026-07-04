@@ -72,7 +72,11 @@ Show minimal platform reliability behavior around provider calls without turning
 Tasks:
 
 - Add basic retry and timeout settings.
+- Add configurable per-session rate limiting.
 - Wrap provider calls with retry handling.
+- Reuse an idempotency key across retry attempts.
+- Cache completed workflow results by idempotency key.
+- Retry null, empty, or whitespace-only provider outputs before validation.
 - Track provider failure categories in traces.
 - Keep the mock provider deterministic.
 - Document the reliability behavior in the README or tradeoffs doc.
@@ -82,6 +86,10 @@ Acceptance criteria:
 - Failed provider calls record trace metadata when possible.
 - Unit tests cover retry exhaustion.
 - Timeout/retry defaults are visible in settings.
+- Rate limit defaults are visible in settings.
+- Retry attempts preserve provider request idempotency metadata.
+- Repeated completed requests can return cached results without calling the provider.
+- Exhausted null or empty provider outputs are traced as `provider_empty_response`.
 - README explains this as a minimal reliability pattern.
 
 Suggested labels:

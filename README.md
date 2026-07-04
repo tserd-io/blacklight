@@ -70,6 +70,25 @@ The import path can resolve to an `LLMProvider` subclass, an instance, or a zero
 
 For local model servers such as Ollama, LM Studio, llama.cpp, or a private localhost endpoint, use the same custom provider path. See [docs/provider-configuration.md](docs/provider-configuration.md) for a local HTTP adapter example and later smoke-test guidance.
 
+## Provider Reliability
+
+Provider calls use a small retry and timeout wrapper so the demo surfaces basic production behavior without becoming a full orchestration framework.
+
+Defaults:
+
+```bash
+set LLM_PROVIDER_TIMEOUT_SECONDS=30
+set LLM_PROVIDER_MAX_RETRIES=2
+set LLM_PROVIDER_RATE_LIMIT_REQUESTS=3
+set LLM_PROVIDER_RATE_LIMIT_WINDOW_SECONDS=10
+```
+
+Rate limiting is applied per `session_id` so one busy workflow does not throttle every user. API callers can pass `session_id` in the JSON body or `X-Session-Id` as a header. CLI callers can pass `--session-id`.
+
+Retries reuse a stable `idempotency_key` in provider request metadata so providers can avoid duplicated side effects or repeated output across attempts. Successful ticket classifications are also cached in SQLite by idempotency key, so repeated calls across processes or restarts can return the completed result without calling the provider again. The built-in OpenAI adapter forwards this as an `Idempotency-Key` header. Custom providers should honor `request.metadata["idempotency_key"]` when their backend supports idempotency.
+
+Provider failures are categorized in trace metadata as `provider_error`, `provider_timeout`, or `provider_empty_response` when a trace store is configured. Null, empty, or whitespace-only provider outputs are retried before schema validation runs.
+
 ## Architecture
 
 ```mermaid

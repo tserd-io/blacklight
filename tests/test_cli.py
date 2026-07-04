@@ -66,6 +66,10 @@ def test_health_command_prints_runtime_config(capsys):
     assert payload["model"] == "mock-ticket-classifier"
     assert payload["openai_configured"] is False
     assert payload["custom_provider_configured"] is False
+    assert payload["provider_timeout_seconds"] == 30.0
+    assert payload["provider_max_retries"] == 2
+    assert payload["provider_rate_limit_requests"] == 3
+    assert payload["provider_rate_limit_window_seconds"] == 10.0
 
 
 def test_prompts_list_command_prints_prompt_metadata(capsys):
