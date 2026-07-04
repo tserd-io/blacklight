@@ -124,6 +124,9 @@ def test_metrics_command_reads_trace_db(capsys, tmp_path):
     assert exit_code == 0
     assert payload["request_count"] == 1
     assert payload["total_estimated_cost_usd"] == 0
+    assert payload["failure_rate"] == 0.0
+    assert payload["by_provider"][0]["provider"] == "mock"
+    assert payload["by_model"][0]["model"] == "mock-ticket-classifier"
 
 
 def test_health_command_prints_runtime_config(capsys):

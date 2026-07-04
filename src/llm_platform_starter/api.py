@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import FastAPI, Header
 
 from llm_platform_starter.examples.ticket_classifier import TicketClassifier
@@ -45,5 +47,5 @@ def classify_ticket(
 
 
 @app.get("/metrics")
-def metrics() -> dict[str, float | int]:
+def metrics() -> dict[str, Any]:
     return trace_store.metrics()
