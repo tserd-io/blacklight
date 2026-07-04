@@ -1,6 +1,7 @@
 import json
 
 from llm_platform_starter.guardrails.validation import validate_ticket_output
+from llm_platform_starter.models import GuardrailOutcome
 
 
 def test_validate_ticket_output_accepts_schema():
@@ -18,6 +19,7 @@ def test_validate_ticket_output_accepts_schema():
 
     assert parsed is not None
     assert validation.passed
+    assert validation.outcome == GuardrailOutcome.accepted
 
 
 def test_validate_ticket_output_flags_pii():
@@ -35,5 +37,43 @@ def test_validate_ticket_output_flags_pii():
 
     assert parsed is not None
     assert not validation.passed
+    assert validation.outcome == GuardrailOutcome.needs_review
     assert parsed.needs_review
     assert validation.pii_findings == ["email"]
+
+
+def test_validate_ticket_output_routes_model_review_flag_to_needs_review():
+    text = json.dumps(
+        {
+            "category": "account",
+            "severity": "high",
+            "confidence": 0.65,
+            "rationale": "Risky account access issue.",
+            "needs_review": True,
+        }
+    )
+
+    parsed, validation = validate_ticket_output(text)
+
+    assert parsed is not None
+    assert not validation.passed
+    assert validation.outcome == GuardrailOutcome.needs_review
+    assert parsed.needs_review
+
+
+def test_validate_ticket_output_rejects_invalid_json():
+    parsed, validation = validate_ticket_output("not json")
+
+    assert parsed is None
+    assert not validation.passed
+    assert validation.outcome == GuardrailOutcome.rejected
+    assert validation.errors
+
+
+def test_validate_ticket_output_rejects_schema_errors():
+    parsed, validation = validate_ticket_output(json.dumps({"category": "billing"}))
+
+    assert parsed is None
+    assert not validation.passed
+    assert validation.outcome == GuardrailOutcome.rejected
+    assert validation.errors

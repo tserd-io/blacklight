@@ -10,7 +10,7 @@ from statistics import median
 
 from llm_platform_starter.evals.metrics import accuracy
 from llm_platform_starter.guardrails.validation import validate_ticket_output
-from llm_platform_starter.models import ProviderRequest, TraceRecord
+from llm_platform_starter.models import GuardrailOutcome, ProviderRequest, TraceRecord
 from llm_platform_starter.observability.cost import estimate_cost
 from llm_platform_starter.observability.evaluations import EvalMetricStore
 from llm_platform_starter.observability.storage import TraceStore
@@ -51,6 +51,7 @@ def run_ticket_classification_eval(
         trace_request_id = f"{eval_run_id}:{row['id']}"
         started = monotonic()
         validation_passed = False
+        guardrail_outcome = GuardrailOutcome.rejected
         trace_provider = provider.name
         trace_model = model
         case = {
@@ -91,6 +92,7 @@ def run_ticket_classification_eval(
                 source_text=f"{row['subject']}\n{row['body']}",
             )
             validation_passed = validation.passed
+            guardrail_outcome = validation.outcome
             trace_provider = response.provider
             trace_model = response.model
             schema_valid = parsed is not None and not validation.errors
@@ -140,6 +142,7 @@ def run_ticket_classification_eval(
                         output_tokens=case["output_tokens"],
                         estimated_cost_usd=case["estimated_cost_usd"],
                         validation_passed=validation_passed,
+                        guardrail_outcome=guardrail_outcome,
                         error_category=case["error_category"],
                     )
                 )

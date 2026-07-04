@@ -1,7 +1,31 @@
+import sqlite3
+
+import pytest
+
 from llm_platform_starter.examples.ticket_classifier import TicketClassifier
-from llm_platform_starter.models import TicketRequest, TraceRecord
+from llm_platform_starter.models import (
+    GuardrailOutcome,
+    ProviderRequest,
+    ProviderResponse,
+    TicketRequest,
+    TraceRecord,
+)
 from llm_platform_starter.observability.storage import TraceStore
+from llm_platform_starter.providers.base import LLMProvider
 from llm_platform_starter.providers.mock import MockProvider
+
+
+class InvalidJsonProvider(LLMProvider):
+    name = "invalid-json"
+
+    def complete(self, request: ProviderRequest) -> ProviderResponse:
+        return ProviderResponse(
+            text="not json",
+            provider=self.name,
+            model=request.model,
+            input_tokens=1,
+            output_tokens=2,
+        )
 
 
 def test_ticket_classifier_writes_trace(tmp_path):
@@ -25,6 +49,52 @@ def test_ticket_classifier_writes_trace(tmp_path):
     assert metrics["request_count"] == 1
     assert metrics["total_estimated_cost_usd"] == 0
     assert traces[0]["session_id"] == "session-a"
+    assert traces[0]["guardrail_outcome"] == "accepted"
+
+
+def test_ticket_classifier_writes_needs_review_guardrail_outcome(tmp_path):
+    store = TraceStore(tmp_path / "traces.sqlite3")
+    classifier = TicketClassifier(
+        provider=MockProvider(),
+        model="mock-ticket-classifier",
+        trace_store=store,
+    )
+
+    classifier.classify(
+        TicketRequest(
+            subject="Account help",
+            body="User email is test@example.com",
+            session_id="session-a",
+        )
+    )
+    traces = store.list_recent()
+
+    assert traces[0]["validation_passed"] is False
+    assert traces[0]["guardrail_outcome"] == "needs_review"
+
+
+def test_ticket_classifier_writes_rejected_guardrail_outcome(tmp_path):
+    store = TraceStore(tmp_path / "traces.sqlite3")
+    classifier = TicketClassifier(
+        provider=InvalidJsonProvider(),
+        model="test-model",
+        trace_store=store,
+        provider_max_retries=0,
+    )
+
+    with pytest.raises(ValueError):
+        classifier.classify(
+            TicketRequest(
+                subject="Refund",
+                body="Duplicate billing charge.",
+                session_id="session-a",
+            )
+        )
+    traces = store.list_recent()
+
+    assert traces[0]["validation_passed"] is False
+    assert traces[0]["guardrail_outcome"] == "rejected"
+    assert traces[0]["error_category"] == "validation_error"
 
 
 def test_trace_store_records_eval_run_id(tmp_path):
@@ -44,6 +114,7 @@ def test_trace_store_records_eval_run_id(tmp_path):
             output_tokens=5,
             estimated_cost_usd=0.0,
             validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.needs_review,
         )
     )
 
@@ -52,6 +123,58 @@ def test_trace_store_records_eval_run_id(tmp_path):
     assert trace is not None
     assert trace["session_id"] == "session-a"
     assert trace["eval_run_id"] == "eval-run-1"
+    assert trace["guardrail_outcome"] == "needs_review"
+
+
+def test_trace_store_adds_guardrail_outcome_column_to_existing_tables(tmp_path):
+    db_path = tmp_path / "traces.sqlite3"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE traces (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              request_id TEXT NOT NULL,
+              prompt_id TEXT NOT NULL,
+              prompt_version INTEGER NOT NULL,
+              provider TEXT NOT NULL,
+              model TEXT NOT NULL,
+              latency_ms REAL NOT NULL,
+              input_tokens INTEGER NOT NULL,
+              output_tokens INTEGER NOT NULL,
+              estimated_cost_usd REAL NOT NULL,
+              validation_passed INTEGER NOT NULL,
+              error_category TEXT
+            )
+            """
+        )
+
+    store = TraceStore(db_path)
+    store.insert(
+        TraceRecord(
+            request_id="request-1",
+            session_id="session-a",
+            prompt_id="ticket_classifier",
+            prompt_version=1,
+            provider="mock",
+            model="mock-ticket-classifier",
+            latency_ms=10,
+            input_tokens=10,
+            output_tokens=5,
+            estimated_cost_usd=0.0,
+            validation_passed=False,
+            guardrail_outcome=GuardrailOutcome.rejected,
+            error_category="validation_error",
+        )
+    )
+
+    with sqlite3.connect(db_path) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(traces)").fetchall()}
+    trace = store.get_by_request_id("request-1")
+
+    assert "guardrail_outcome" in columns
+    assert trace is not None
+    assert trace["guardrail_outcome"] == "rejected"
 
 
 def test_trace_store_metrics_group_by_provider_and_model(tmp_path):
@@ -70,6 +193,7 @@ def test_trace_store_metrics_group_by_provider_and_model(tmp_path):
             output_tokens=5,
             estimated_cost_usd=0.0,
             validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.accepted,
         )
     )
     store.insert(
@@ -85,6 +209,7 @@ def test_trace_store_metrics_group_by_provider_and_model(tmp_path):
             output_tokens=6,
             estimated_cost_usd=0.0,
             validation_passed=False,
+            guardrail_outcome=GuardrailOutcome.rejected,
             error_category="validation_error",
         )
     )
@@ -101,6 +226,7 @@ def test_trace_store_metrics_group_by_provider_and_model(tmp_path):
             output_tokens=10,
             estimated_cost_usd=0.000024,
             validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.needs_review,
             error_category="provider_timeout",
         )
     )
@@ -133,6 +259,32 @@ def test_trace_store_metrics_group_by_provider_and_model(tmp_path):
     assert metrics["by_model"][0]["model"] == "mock-ticket-classifier"
     assert metrics["by_provider_model"][0]["provider"] == "mock"
     assert metrics["by_provider_model"][0]["model"] == "mock-ticket-classifier"
+    assert metrics["by_guardrail_outcome"] == [
+        {
+            "guardrail_outcome": "accepted",
+            "request_count": 1,
+            "avg_latency_ms": 10,
+            "total_estimated_cost_usd": 0.0,
+            "failure_rate": 0.0,
+            "validation_failure_rate": 0.0,
+        },
+        {
+            "guardrail_outcome": "needs_review",
+            "request_count": 1,
+            "avg_latency_ms": 50,
+            "total_estimated_cost_usd": 0.000024,
+            "failure_rate": 1.0,
+            "validation_failure_rate": 0.0,
+        },
+        {
+            "guardrail_outcome": "rejected",
+            "request_count": 1,
+            "avg_latency_ms": 30,
+            "total_estimated_cost_usd": 0.0,
+            "failure_rate": 1.0,
+            "validation_failure_rate": 1.0,
+        },
+    ]
 
 
 def test_trace_store_lists_by_session_id(tmp_path):
