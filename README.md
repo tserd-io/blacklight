@@ -134,6 +134,10 @@ The included example classifies synthetic support tickets into:
 
 The output schema also captures severity, confidence, and whether a human review is needed.
 
+## Public-Safe Data
+
+All examples, prompts, and eval fixtures are synthetic and public-safe. They avoid real customers, companies, private identifiers, and proprietary workflows.
+
 ## Project Status
 
 MVP scaffold complete:
