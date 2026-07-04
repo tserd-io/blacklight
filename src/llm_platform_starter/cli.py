@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from typing import Any
 
 from llm_platform_starter.evals.runner import run_ticket_classification_eval
@@ -17,6 +18,30 @@ from llm_platform_starter.settings import load_settings
 
 def _print_json(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, indent=2))
+
+
+def _print_error(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+def _trace_detail(trace: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "request_id": trace["request_id"],
+        "session_id": trace["session_id"],
+        "eval_run_id": trace["eval_run_id"],
+        "prompt_id": trace["prompt_id"],
+        "prompt_version": trace["prompt_version"],
+        "provider": trace["provider"],
+        "model": trace["model"],
+        "latency_ms": trace["latency_ms"],
+        "input_tokens": trace["input_tokens"],
+        "output_tokens": trace["output_tokens"],
+        "estimated_cost_usd": trace["estimated_cost_usd"],
+        "validation_passed": trace["validation_passed"],
+        "guardrail_outcome": trace["guardrail_outcome"],
+        "error_category": trace["error_category"],
+        "created_at": trace["created_at"],
+    }
 
 
 def classify(args: argparse.Namespace) -> int:
@@ -152,7 +177,10 @@ def trace_show(args: argparse.Namespace) -> int:
     settings = load_settings()
     trace_store = TraceStore(args.trace_db_path or settings.trace_db_path)
     trace = trace_store.get_by_request_id(args.request_id)
-    _print_json({"trace": trace})
+    if trace is None:
+        _print_error(f"Trace not found: {args.request_id}")
+        return 1
+    _print_json({"trace": _trace_detail(trace)})
     return 0
 
 
@@ -245,24 +273,36 @@ def build_parser() -> argparse.ArgumentParser:
     prompts_show_parser.add_argument("--version", type=int, default=None, help="Prompt version.")
     prompts_show_parser.set_defaults(func=prompts_show)
 
-    trace_parser = subparsers.add_parser("trace", help="Inspect trace records.")
-    trace_subparsers = trace_parser.add_subparsers(dest="trace_command", required=True)
-    trace_list_parser = trace_subparsers.add_parser("list", help="List recent trace records.")
-    trace_list_parser.add_argument("--limit", type=int, default=10, help="Maximum traces to return.")
-    trace_list_parser.add_argument(
-        "--trace-db-path",
-        default=None,
-        help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
-    )
-    trace_list_parser.set_defaults(func=trace_list)
-    trace_show_parser = trace_subparsers.add_parser("show", help="Show one trace by request id.")
-    trace_show_parser.add_argument("request_id", help="Request id to inspect.")
-    trace_show_parser.add_argument(
-        "--trace-db-path",
-        default=None,
-        help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
-    )
-    trace_show_parser.set_defaults(func=trace_show)
+    def add_trace_commands(command_name: str) -> None:
+        trace_parser = subparsers.add_parser(command_name, help="Inspect trace records.")
+        trace_subparsers = trace_parser.add_subparsers(
+            dest=f"{command_name}_command",
+            required=True,
+        )
+        trace_list_parser = trace_subparsers.add_parser("list", help="List recent trace records.")
+        trace_list_parser.add_argument(
+            "--limit",
+            type=int,
+            default=10,
+            help="Maximum traces to return.",
+        )
+        trace_list_parser.add_argument(
+            "--trace-db-path",
+            default=None,
+            help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+        )
+        trace_list_parser.set_defaults(func=trace_list)
+        trace_show_parser = trace_subparsers.add_parser("show", help="Show one trace by request id.")
+        trace_show_parser.add_argument("request_id", help="Request id to inspect.")
+        trace_show_parser.add_argument(
+            "--trace-db-path",
+            default=None,
+            help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+        )
+        trace_show_parser.set_defaults(func=trace_show)
+
+    add_trace_commands("trace")
+    add_trace_commands("traces")
 
     return parser
 

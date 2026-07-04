@@ -100,6 +100,7 @@ def test_eval_history_commands_read_persisted_runs(capsys, tmp_path):
     assert list_payload["eval_runs"][0]["eval_run_id"] == run_payload["eval_run_id"]
     assert show_payload["eval_run"]["eval_run_id"] == run_payload["eval_run_id"]
     assert show_payload["eval_run"]["cases"]
+    assert show_payload["eval_run"]["cases"][0]["trace_request_id"]
     assert show_payload["traces"][0]["eval_run_id"] == run_payload["eval_run_id"]
 
 
@@ -187,8 +188,33 @@ def test_trace_commands_read_trace_records(capsys, tmp_path):
 
     show_exit_code = main(["trace", "show", request_id, "--trace-db-path", str(trace_db_path)])
     show_payload = json.loads(capsys.readouterr().out)
+    traces_show_exit_code = main(["traces", "show", request_id, "--trace-db-path", str(trace_db_path)])
+    traces_show_payload = json.loads(capsys.readouterr().out)
 
     assert list_exit_code == 0
     assert show_exit_code == 0
+    assert traces_show_exit_code == 0
     assert list_payload["traces"][0]["prompt_id"] == "ticket_classifier"
+    assert show_payload["trace"] == traces_show_payload["trace"]
     assert show_payload["trace"]["request_id"] == request_id
+    assert show_payload["trace"]["provider"] == "mock"
+    assert show_payload["trace"]["model"] == "mock-ticket-classifier"
+    assert show_payload["trace"]["prompt_version"] == 1
+    assert show_payload["trace"]["latency_ms"] >= 0
+    assert show_payload["trace"]["input_tokens"] > 0
+    assert show_payload["trace"]["output_tokens"] > 0
+    assert show_payload["trace"]["estimated_cost_usd"] == 0.0
+    assert show_payload["trace"]["validation_passed"] is True
+    assert show_payload["trace"]["guardrail_outcome"] == "accepted"
+    assert show_payload["trace"]["error_category"] is None
+
+
+def test_trace_show_missing_record_returns_clear_error(capsys, tmp_path):
+    trace_db_path = tmp_path / "traces.sqlite3"
+
+    exit_code = main(["trace", "show", "missing-request", "--trace-db-path", str(trace_db_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Trace not found: missing-request" in captured.err
