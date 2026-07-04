@@ -54,6 +54,7 @@ Inspect persisted eval history:
 ```bash
 llm-platform eval list
 llm-platform eval show <eval_run_id>
+llm-platform traces show <trace_id>
 ```
 
 ## Provider Configuration
