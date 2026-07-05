@@ -79,6 +79,14 @@ llm-platform demo --verbose
 
 The demo uses the mock provider, runs the `ticket_classifier` workflow with synthetic sample input, writes a trace, and prints the exact follow-up commands for trace inspection, evals, and the equivalent lower-level workflow call.
 
+Seed demo state for console/API surfaces:
+
+```bash
+llm-platform seed demo-data --trace-db-path traces.sqlite3
+```
+
+The seed command loads synthetic mock-mode sample inputs, successful and needs-review trace records, a persisted eval run with linked eval cases, and prompt-version metadata. It is safe to rerun: stable request IDs and eval run IDs update existing demo records instead of duplicating them.
+
 ## CLI Example
 
 ```bash
