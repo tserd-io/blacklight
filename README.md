@@ -326,6 +326,10 @@ The API and CLI use the same workflow path. Evals also run through the same prov
 
 ## Provider Configuration
 
+For local console use, copy `user.env.example` to `user.env` and put app-editable settings there. The console settings API is allowed to read and update `user.env`.
+
+Keep `.env` for private operator-owned values that the app should not edit. Runtime process environment variables still take precedence over `user.env`, so deployment systems, shell exports, and CI secrets can override local user settings without rewriting files.
+
 The default provider is the deterministic local mock:
 
 ```bash

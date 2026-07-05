@@ -328,6 +328,100 @@ def test_console_api_provider_test_does_not_require_live_keys(monkeypatch, tmp_p
     assert payload["cli"]["health"] == "llm-platform health"
 
 
+def test_console_settings_update_writes_user_env_without_exposing_secrets(monkeypatch, tmp_path):
+    original_state = (
+        api.settings,
+        api.trace_store,
+        api.idempotency_store,
+        api.eval_store,
+        api.review_store,
+        api.classifier,
+        api.classifier_startup_error,
+    )
+    user_env_path = tmp_path / "user.env"
+    user_env_path.write_text("# console-managed settings\nPRIVATE_NOTE=keep\n", encoding="utf-8")
+    monkeypatch.setenv("LLM_PLATFORM_USER_ENV_PATH", str(user_env_path))
+    for key in [
+        "LLM_PROVIDER",
+        "LLM_MODEL",
+        "TRACE_DB_PATH",
+        "OPENAI_API_KEY",
+        "LLM_CUSTOM_PROVIDER",
+    ]:
+        monkeypatch.delenv(key, raising=False)
+
+    try:
+        response = TestClient(api.app).patch(
+            "/api/console/settings",
+            json={
+                "settings": {
+                    "LLM_PROVIDER": "openai",
+                    "LLM_MODEL": "gpt-4o-mini",
+                    "OPENAI_API_KEY": "sk-test-secret",
+                    "TRACE_DB_PATH": str(tmp_path / "updated.sqlite3"),
+                }
+            },
+        )
+        payload = response.json()
+        written = user_env_path.read_text(encoding="utf-8")
+    finally:
+        (
+            api.settings,
+            api.trace_store,
+            api.idempotency_store,
+            api.eval_store,
+            api.review_store,
+            api.classifier,
+            api.classifier_startup_error,
+        ) = original_state
+
+    assert response.status_code == 200
+    assert payload["updated_keys"] == [
+        "LLM_MODEL",
+        "LLM_PROVIDER",
+        "OPENAI_API_KEY",
+        "TRACE_DB_PATH",
+    ]
+    assert payload["settings"]["openai_configured"] is True
+    assert payload["settings"]["user_env"]["managed_keys"]["OPENAI_API_KEY"]["value"] == "***"
+    assert "sk-test-secret" not in str(payload)
+    assert "PRIVATE_NOTE=keep" in written
+    assert "OPENAI_API_KEY=sk-test-secret" in written
+    assert payload["message"].endswith("The private .env file was not touched.")
+
+
+def test_console_settings_update_rejects_unknown_user_env_keys(monkeypatch, tmp_path):
+    original_state = (
+        api.settings,
+        api.trace_store,
+        api.idempotency_store,
+        api.eval_store,
+        api.review_store,
+        api.classifier,
+        api.classifier_startup_error,
+    )
+    monkeypatch.setenv("LLM_PLATFORM_USER_ENV_PATH", str(tmp_path / "user.env"))
+
+    try:
+        response = TestClient(api.app).patch(
+            "/api/console/settings",
+            json={"settings": {"SHELL": "powershell"}},
+        )
+    finally:
+        (
+            api.settings,
+            api.trace_store,
+            api.idempotency_store,
+            api.eval_store,
+            api.review_store,
+            api.classifier,
+            api.classifier_startup_error,
+        ) = original_state
+
+    assert response.status_code == 400
+    assert "Unsupported user.env setting" in response.json()["detail"]
+
+
 def test_session_history_json_returns_filtered_session_timeline(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "trace_store", _build_session_history_store(tmp_path))
 

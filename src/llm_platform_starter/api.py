@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import os
 from html import escape
 from typing import Any
 from urllib.parse import parse_qs
@@ -28,7 +29,14 @@ from llm_platform_starter.session_history import (
     build_session_history,
     session_trace_detail,
 )
-from llm_platform_starter.settings import load_settings
+from llm_platform_starter.settings import (
+    SECRET_ENV_KEYS,
+    USER_EDITABLE_ENV_KEYS,
+    get_user_env_path,
+    load_settings,
+    load_user_env,
+    write_user_env,
+)
 
 settings = load_settings()
 trace_store = TraceStore(settings.trace_db_path)
@@ -68,6 +76,10 @@ class ConsoleWorkflowRunRequest(BaseModel):
 class ConsoleEvalRunRequest(BaseModel):
     session_id: str = "console-api-eval"
     prompt_version: int | None = None
+
+
+class ConsoleSettingsUpdateRequest(BaseModel):
+    settings: dict[str, Any]
 
 
 def _build_classifier() -> TicketClassifier:
@@ -435,7 +447,84 @@ def _provider_payload(provider: str) -> dict[str, Any]:
     }
 
 
+def _editable_settings_catalog() -> list[dict[str, Any]]:
+    definitions = {
+        "LLM_PROVIDER": ("Provider", "provider", "select", ["mock", "openai", "custom"]),
+        "LLM_MODEL": ("Model", "provider", "text", None),
+        "TRACE_DB_PATH": ("Trace database path", "storage", "text", None),
+        "OPENAI_API_KEY": ("OpenAI API key", "provider", "secret", None),
+        "LLM_CUSTOM_PROVIDER": ("Custom provider import path", "provider", "text", None),
+        "LLM_PROVIDER_TIMEOUT_SECONDS": ("Provider timeout seconds", "reliability", "number", None),
+        "LLM_PROVIDER_MAX_RETRIES": ("Provider max retries", "reliability", "number", None),
+        "LLM_PROVIDER_RATE_LIMIT_REQUESTS": (
+            "Provider rate limit requests",
+            "reliability",
+            "number",
+            None,
+        ),
+        "LLM_PROVIDER_RATE_LIMIT_WINDOW_SECONDS": (
+            "Provider rate limit window seconds",
+            "reliability",
+            "number",
+            None,
+        ),
+    }
+    return [
+        {
+            "key": key,
+            "label": label,
+            "group": group,
+            "input_type": input_type,
+            "options": options,
+            "secret": key in SECRET_ENV_KEYS,
+            "source": "process_env" if os.getenv(key) is not None else "user_env_or_default",
+            "editable_in_user_env": key in USER_EDITABLE_ENV_KEYS,
+        }
+        for key, (label, group, input_type, options) in definitions.items()
+    ]
+
+
+def _user_env_payload(user_env: dict[str, str]) -> dict[str, Any]:
+    return {
+        "path": str(get_user_env_path()),
+        "managed_keys": {
+            key: {
+                "configured": key in user_env and bool(user_env[key]),
+                "value": "***" if key in SECRET_ENV_KEYS and user_env.get(key) else user_env.get(key),
+                "source": "process_env" if os.getenv(key) is not None else "user_env",
+                "overridden_by_process_env": os.getenv(key) is not None,
+            }
+            for key in sorted(USER_EDITABLE_ENV_KEYS)
+            if key in user_env
+        },
+        "note": ".env remains private and is not read from or written by the console settings API.",
+    }
+
+
+def _reload_runtime_settings() -> None:
+    global classifier
+    global classifier_startup_error
+    global eval_store
+    global idempotency_store
+    global review_store
+    global settings
+    global trace_store
+
+    settings = load_settings()
+    trace_store = TraceStore(settings.trace_db_path)
+    idempotency_store = IdempotencyStore(settings.trace_db_path)
+    eval_store = EvalMetricStore(settings.trace_db_path)
+    review_store = ReviewDecisionStore(settings.trace_db_path)
+    try:
+        classifier = _build_classifier()
+        classifier_startup_error = None
+    except ProviderConfigurationError as exc:
+        classifier = None
+        classifier_startup_error = exc
+
+
 def _settings_payload() -> dict[str, Any]:
+    user_env = load_user_env()
     return {
         "provider": settings.provider,
         "model": settings.model,
@@ -446,6 +535,11 @@ def _settings_payload() -> dict[str, Any]:
         "provider_max_retries": settings.provider_max_retries,
         "provider_rate_limit_requests": settings.provider_rate_limit_requests,
         "provider_rate_limit_window_seconds": settings.provider_rate_limit_window_seconds,
+        "editable_file": str(get_user_env_path()),
+        "private_env_file": ".env is treated as operator-owned and is never edited by the app.",
+        "restart_required": False,
+        "user_env": _user_env_payload(user_env),
+        "editable_settings": _editable_settings_catalog(),
         "cli": {"health": "llm-platform health"},
     }
 
@@ -1338,6 +1432,20 @@ def console_reviews_json(
 @app.get("/api/console/settings")
 def console_settings_json() -> dict[str, Any]:
     return _settings_payload()
+
+
+@app.patch("/api/console/settings")
+def console_settings_update_json(request: ConsoleSettingsUpdateRequest) -> dict[str, Any]:
+    try:
+        write_user_env(request.settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _reload_runtime_settings()
+    return {
+        "message": "Updated user.env and reloaded runtime settings. The private .env file was not touched.",
+        "updated_keys": sorted(request.settings),
+        "settings": _settings_payload(),
+    }
 
 
 @app.post("/classify-ticket")
