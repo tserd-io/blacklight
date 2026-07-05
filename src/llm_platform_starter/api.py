@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import os
 from html import escape
 from typing import Any
 from urllib.parse import parse_qs
@@ -10,6 +11,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from llm_platform_starter.errors import GuardrailValidationError, describe_exception, session_not_found_error
+from llm_platform_starter.evals.runner import run_ticket_classification_eval
 from llm_platform_starter.examples.ticket_classifier import TicketClassifier
 from llm_platform_starter.models import TicketClassification, TicketRequest
 from llm_platform_starter.observability.idempotency import (
@@ -27,7 +29,14 @@ from llm_platform_starter.session_history import (
     build_session_history,
     session_trace_detail,
 )
-from llm_platform_starter.settings import load_settings
+from llm_platform_starter.settings import (
+    SECRET_ENV_KEYS,
+    USER_EDITABLE_ENV_KEYS,
+    get_user_env_path,
+    load_settings,
+    load_user_env,
+    write_user_env,
+)
 
 settings = load_settings()
 trace_store = TraceStore(settings.trace_db_path)
@@ -55,6 +64,22 @@ class ReviewDecisionRequest(BaseModel):
     decision: str
     reviewer: str = "business-reviewer"
     notes: str = ""
+
+
+class ConsoleWorkflowRunRequest(BaseModel):
+    subject: str = "Refund request"
+    body: str = "Customer asks for a refund after duplicate billing."
+    session_id: str = "console-api-demo"
+    idempotency_key: str | None = None
+
+
+class ConsoleEvalRunRequest(BaseModel):
+    session_id: str = "console-api-eval"
+    prompt_version: int | None = None
+
+
+class ConsoleSettingsUpdateRequest(BaseModel):
+    settings: dict[str, Any]
 
 
 def _build_classifier() -> TicketClassifier:
@@ -255,6 +280,300 @@ def _console_shell(*, active: str, title: str, body: str) -> HTMLResponse:
 
 def _console_command_panel(command: str) -> str:
     return f'<div class="panel"><h2>CLI Equivalent</h2><p>{_cli_command(command)}</p></div>'
+
+
+def _trace_db_arg() -> str:
+    return f"--trace-db-path {settings.trace_db_path}"
+
+
+def _prompt_payload(prompt_id: str, version: int | None = None) -> dict[str, Any]:
+    try:
+        prompt = PromptRegistry().get(prompt_id, version=version)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    version_arg = f" --version {prompt.version}" if version is not None else ""
+    return {
+        "prompt_id": prompt.prompt_id,
+        "display_name": prompt.display_name,
+        "version": prompt.version,
+        "active": prompt.active,
+        "domain": prompt.domain,
+        "task_type": prompt.task_type,
+        "output_schema": prompt.output_schema,
+        "eval_fixture": prompt.eval_fixture,
+        "comparison_group": prompt.comparison_group,
+        "tags": prompt.tags,
+        "input_variables": prompt.input_variables,
+        "notes": prompt.notes,
+        "template": prompt.template,
+        "cli": {
+            "show": f"llm-platform prompts show {prompt.prompt_id}{version_arg}",
+            "list": "llm-platform prompts list",
+        },
+    }
+
+
+def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
+    detail = session_trace_detail(trace)
+    payload = {
+        **detail,
+        "links": {
+            "session_api": f"/api/sessions/{trace['session_id']}",
+            "session_ui": f"/sessions/{trace['session_id']}",
+        },
+        "cli": {
+            "show": f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
+            "session": f"llm-platform session show {trace['session_id']} {_trace_db_arg()}",
+            "list": f"llm-platform trace list {_trace_db_arg()} --limit 10",
+        },
+    }
+    if detail["reviewable"]:
+        payload["links"]["review_ui"] = (
+            f"/sessions/{trace['session_id']}/review/{trace['request_id']}"
+        )
+    if trace["eval_run_id"]:
+        payload["links"]["eval_api"] = f"/api/console/evals/{trace['eval_run_id']}"
+        payload["cli"]["eval"] = (
+            f"llm-platform eval show {trace['eval_run_id']} {_trace_db_arg()}"
+        )
+    return payload
+
+
+def _session_run_summaries(limit: int = 50) -> list[dict[str, Any]]:
+    sessions: dict[str, dict[str, Any]] = {}
+    for trace in trace_store.list_recent(limit=limit):
+        session = sessions.setdefault(
+            trace["session_id"],
+            {
+                "session_id": trace["session_id"],
+                "request_count": 0,
+                "latest_created_at": trace["created_at"],
+                "failure_count": 0,
+                "review_count": 0,
+                "total_tokens": 0,
+                "total_estimated_cost_usd": 0.0,
+            },
+        )
+        session["request_count"] += 1
+        session["failure_count"] += 1 if trace["error_category"] is not None else 0
+        session["review_count"] += 1 if trace["guardrail_outcome"] == "needs_review" else 0
+        session["total_tokens"] += trace["input_tokens"] + trace["output_tokens"]
+        session["total_estimated_cost_usd"] += trace["estimated_cost_usd"]
+    runs = []
+    for session in sessions.values():
+        session["total_estimated_cost_usd"] = round(session["total_estimated_cost_usd"], 8)
+        session["cli"] = {
+            "show": f"llm-platform session show {session['session_id']} {_trace_db_arg()}",
+        }
+        session["links"] = {
+            "api": f"/api/console/runs/{session['session_id']}",
+            "ui": f"/sessions/{session['session_id']}",
+        }
+        runs.append(session)
+    return runs
+
+
+def _workflow_payload(workflow_id: str = "ticket_classifier") -> dict[str, Any]:
+    if workflow_id != "ticket_classifier":
+        raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}")
+    return {
+        "workflow_id": workflow_id,
+        "display_name": "Ticket Classifier",
+        "description": "Classifies support-style work items with validation, tracing, and review routing.",
+        "provider": settings.provider,
+        "model": settings.model,
+        "mock_mode_available": True,
+        "sample_input": {
+            "subject": "Refund request",
+            "body": "Customer asks for a refund after duplicate billing.",
+            "session_id": "console-api-demo",
+        },
+        "cli": {
+            "run": (
+                'llm-platform classify --subject "Refund request" '
+                '--body "Customer asks for a refund after duplicate billing." '
+                f"--session-id console-api-demo {_trace_db_arg()}"
+            ),
+            "demo": f"llm-platform demo --verbose {_trace_db_arg()}",
+        },
+        "links": {
+            "run": f"/api/console/workflows/{workflow_id}/run",
+            "traces": "/api/console/traces",
+        },
+    }
+
+
+def _eval_run_payload(run: dict[str, Any]) -> dict[str, Any]:
+    eval_run_id = run["eval_run_id"]
+    return {
+        **run,
+        "links": {
+            "api": f"/api/console/evals/{eval_run_id}",
+            "session_api": f"/api/console/runs/{run['session_id']}",
+            "session_ui": f"/sessions/{run['session_id']}",
+        },
+        "cli": {
+            "show": f"llm-platform eval show {eval_run_id} {_trace_db_arg()}",
+            "list": f"llm-platform eval list {_trace_db_arg()}",
+        },
+    }
+
+
+def _provider_payload(provider: str) -> dict[str, Any]:
+    provider = provider.lower()
+    if provider not in {"mock", "openai", "custom"}:
+        raise HTTPException(status_code=404, detail=f"Provider not found: {provider}")
+    configured = {
+        "mock": True,
+        "openai": bool(settings.openai_api_key),
+        "custom": bool(settings.custom_provider_path),
+    }[provider]
+    return {
+        "provider": provider,
+        "active": settings.provider == provider,
+        "configured": configured,
+        "ready": configured,
+        "requires_live_credentials": provider != "mock",
+        "model": settings.model if settings.provider == provider else None,
+        "configuration_hint": {
+            "mock": "Ready by default for demos and tests.",
+            "openai": "Set LLM_PROVIDER=openai and OPENAI_API_KEY.",
+            "custom": "Set LLM_PROVIDER=custom and LLM_CUSTOM_PROVIDER to an import path.",
+        }[provider],
+        "cli": {
+            "health": "llm-platform health",
+            "demo": f"llm-platform demo --verbose {_trace_db_arg()}",
+        },
+    }
+
+
+def _editable_settings_catalog() -> list[dict[str, Any]]:
+    definitions = {
+        "LLM_PROVIDER": ("Provider", "provider", "select", ["mock", "openai", "custom"]),
+        "LLM_MODEL": ("Model", "provider", "text", None),
+        "TRACE_DB_PATH": ("Trace database path", "storage", "text", None),
+        "OPENAI_API_KEY": ("OpenAI API key", "provider", "secret", None),
+        "LLM_CUSTOM_PROVIDER": ("Custom provider import path", "provider", "text", None),
+        "LLM_PROVIDER_TIMEOUT_SECONDS": ("Provider timeout seconds", "reliability", "number", None),
+        "LLM_PROVIDER_MAX_RETRIES": ("Provider max retries", "reliability", "number", None),
+        "LLM_PROVIDER_RATE_LIMIT_REQUESTS": (
+            "Provider rate limit requests",
+            "reliability",
+            "number",
+            None,
+        ),
+        "LLM_PROVIDER_RATE_LIMIT_WINDOW_SECONDS": (
+            "Provider rate limit window seconds",
+            "reliability",
+            "number",
+            None,
+        ),
+    }
+    return [
+        {
+            "key": key,
+            "label": label,
+            "group": group,
+            "input_type": input_type,
+            "options": options,
+            "secret": key in SECRET_ENV_KEYS,
+            "source": "process_env" if os.getenv(key) is not None else "user_env_or_default",
+            "editable_in_user_env": key in USER_EDITABLE_ENV_KEYS,
+        }
+        for key, (label, group, input_type, options) in definitions.items()
+    ]
+
+
+def _user_env_payload(user_env: dict[str, str]) -> dict[str, Any]:
+    return {
+        "path": str(get_user_env_path()),
+        "managed_keys": {
+            key: {
+                "configured": key in user_env and bool(user_env[key]),
+                "value": "***" if key in SECRET_ENV_KEYS and user_env.get(key) else user_env.get(key),
+                "source": "process_env" if os.getenv(key) is not None else "user_env",
+                "overridden_by_process_env": os.getenv(key) is not None,
+            }
+            for key in sorted(USER_EDITABLE_ENV_KEYS)
+            if key in user_env
+        },
+        "note": ".env remains private and is not read from or written by the console settings API.",
+    }
+
+
+def _reload_runtime_settings() -> None:
+    global classifier
+    global classifier_startup_error
+    global eval_store
+    global idempotency_store
+    global review_store
+    global settings
+    global trace_store
+
+    settings = load_settings()
+    trace_store = TraceStore(settings.trace_db_path)
+    idempotency_store = IdempotencyStore(settings.trace_db_path)
+    eval_store = EvalMetricStore(settings.trace_db_path)
+    review_store = ReviewDecisionStore(settings.trace_db_path)
+    try:
+        classifier = _build_classifier()
+        classifier_startup_error = None
+    except ProviderConfigurationError as exc:
+        classifier = None
+        classifier_startup_error = exc
+
+
+def _settings_payload() -> dict[str, Any]:
+    user_env = load_user_env()
+    return {
+        "provider": settings.provider,
+        "model": settings.model,
+        "trace_db_path": settings.trace_db_path,
+        "openai_configured": bool(settings.openai_api_key),
+        "custom_provider_configured": bool(settings.custom_provider_path),
+        "provider_timeout_seconds": settings.provider_timeout_seconds,
+        "provider_max_retries": settings.provider_max_retries,
+        "provider_rate_limit_requests": settings.provider_rate_limit_requests,
+        "provider_rate_limit_window_seconds": settings.provider_rate_limit_window_seconds,
+        "editable_file": str(get_user_env_path()),
+        "private_env_file": ".env is treated as operator-owned and is never edited by the app.",
+        "restart_required": False,
+        "user_env": _user_env_payload(user_env),
+        "editable_settings": _editable_settings_catalog(),
+        "cli": {"health": "llm-platform health"},
+    }
+
+
+def _dashboard_payload(limit: int = 5) -> dict[str, Any]:
+    review_payload = _review_queue_payload(limit=100, include_decided=False)
+    return {
+        "dashboard": "console",
+        "metrics": trace_store.metrics(),
+        "recent_traces": [_trace_payload(trace) for trace in trace_store.list_recent(limit=limit)],
+        "recent_eval_runs": [
+            _eval_run_payload(run) for run in eval_store.list_runs(limit=limit)
+        ],
+        "review_queue": review_payload["summary"],
+        "workflows": [_workflow_payload()],
+        "providers": [_provider_payload(provider) for provider in ["mock", "openai", "custom"]],
+        "settings": _settings_payload(),
+        "links": {
+            "console": "/console",
+            "workflows": "/api/console/workflows",
+            "runs": "/api/console/runs",
+            "traces": "/api/console/traces",
+            "evals": "/api/console/evals",
+            "prompts": "/api/console/prompts",
+            "providers": "/api/console/providers",
+            "reviews": "/api/console/reviews",
+            "settings": "/api/console/settings",
+        },
+        "cli": {
+            "guided_demo": f"llm-platform demo --verbose {_trace_db_arg()}",
+            "seed_demo_data": f"llm-platform seed demo-data {_trace_db_arg()}",
+            "health": "llm-platform health",
+        },
+    }
 
 
 def _render_console_dashboard() -> HTMLResponse:
@@ -884,6 +1203,249 @@ def console_settings() -> HTMLResponse:
 @app.get("/console/docs", response_class=HTMLResponse)
 def console_docs() -> HTMLResponse:
     return _render_console_docs()
+
+
+@app.get("/api/dashboard")
+def console_dashboard_json(limit: int = Query(default=5, ge=1, le=50)) -> dict[str, Any]:
+    return _dashboard_payload(limit=limit)
+
+
+@app.get("/api/console/dashboard")
+def console_dashboard_json_alias(limit: int = Query(default=5, ge=1, le=50)) -> dict[str, Any]:
+    return _dashboard_payload(limit=limit)
+
+
+@app.get("/api/console/workflows")
+def console_workflows_json() -> dict[str, Any]:
+    return {
+        "workflows": [_workflow_payload()],
+        "cli": {"list": "llm-platform demo --verbose"},
+    }
+
+
+@app.get("/api/console/workflows/{workflow_id}")
+def console_workflow_json(workflow_id: str) -> dict[str, Any]:
+    workflow = _workflow_payload(workflow_id)
+    return {"workflow": workflow, "cli": workflow["cli"]}
+
+
+@app.post("/api/console/workflows/{workflow_id}/run")
+def console_workflow_run_json(
+    workflow_id: str,
+    run_request: ConsoleWorkflowRunRequest | None = None,
+) -> dict[str, Any]:
+    _workflow_payload(workflow_id)
+    run_request = run_request or ConsoleWorkflowRunRequest()
+    demo_classifier = TicketClassifier(
+        provider=MockProvider(),
+        model="mock-ticket-classifier",
+        trace_store=trace_store,
+        idempotency_store=idempotency_store,
+        provider_timeout_seconds=settings.provider_timeout_seconds,
+        provider_max_retries=settings.provider_max_retries,
+        provider_rate_limit_requests=settings.provider_rate_limit_requests,
+        provider_rate_limit_window_seconds=settings.provider_rate_limit_window_seconds,
+    )
+    result = demo_classifier.classify(
+        TicketRequest(
+            subject=run_request.subject,
+            body=run_request.body,
+            session_id=run_request.session_id,
+            idempotency_key=run_request.idempotency_key or f"console-api-{uuid.uuid4()}",
+        )
+    )
+    traces = trace_store.list_by_session_id(run_request.session_id, limit=500)
+    trace = traces[-1]
+    return {
+        "workflow_id": workflow_id,
+        "message": "Mock-mode workflow run completed without live provider credentials.",
+        "input": run_request.model_dump(mode="json"),
+        "result": result.model_dump(mode="json"),
+        "trace": _trace_payload(trace),
+        "cli": {
+            "equivalent_run": (
+                f'llm-platform classify --subject "{run_request.subject}" '
+                f'--body "{run_request.body}" --session-id {run_request.session_id} '
+                f"{_trace_db_arg()}"
+            ),
+            "trace": f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
+            "session": f"llm-platform session show {run_request.session_id} {_trace_db_arg()}",
+        },
+    }
+
+
+@app.get("/api/console/runs")
+def console_runs_json(limit: int = Query(default=50, ge=1, le=500)) -> dict[str, Any]:
+    return {
+        "runs": _session_run_summaries(limit=limit),
+        "cli": {"show": f"llm-platform session show <session_id> {_trace_db_arg()}"},
+    }
+
+
+@app.get("/api/console/runs/{session_id}")
+def console_run_json(
+    session_id: str,
+    status: str = Query(default="all"),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> dict[str, Any]:
+    payload = _session_history_payload(session_id=session_id, status=status, limit=limit)
+    return {
+        **payload,
+        "cli": {
+            "show": f"llm-platform session show {session_id} {_trace_db_arg()} --limit {limit}",
+            "traces": f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+        },
+        "links": {"ui": f"/sessions/{session_id}"},
+    }
+
+
+@app.get("/api/console/traces")
+def console_traces_json(limit: int = Query(default=25, ge=1, le=500)) -> dict[str, Any]:
+    return {
+        "traces": [_trace_payload(trace) for trace in trace_store.list_recent(limit=limit)],
+        "cli": {"list": f"llm-platform trace list {_trace_db_arg()} --limit {limit}"},
+    }
+
+
+@app.get("/api/console/traces/{request_id}")
+def console_trace_json(request_id: str) -> dict[str, Any]:
+    trace = trace_store.get_by_request_id(request_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail=f"Trace not found: {request_id}")
+    payload = _trace_payload(trace)
+    return {"trace": payload, "cli": payload["cli"]}
+
+
+@app.get("/api/console/evals")
+def console_evals_json(limit: int = Query(default=25, ge=1, le=500)) -> dict[str, Any]:
+    return {
+        "eval_runs": [_eval_run_payload(run) for run in eval_store.list_runs(limit=limit)],
+        "cli": {
+            "run": f"llm-platform eval run {_trace_db_arg()} --session-id console-api-eval",
+            "list": f"llm-platform eval list {_trace_db_arg()}",
+        },
+    }
+
+
+@app.post("/api/console/evals/run")
+def console_eval_run_json(eval_request: ConsoleEvalRunRequest | None = None) -> dict[str, Any]:
+    eval_request = eval_request or ConsoleEvalRunRequest()
+    report = run_ticket_classification_eval(
+        provider=MockProvider(),
+        model="mock-ticket-classifier",
+        session_id=eval_request.session_id,
+        prompt_version=eval_request.prompt_version,
+        eval_store=eval_store,
+        trace_store=trace_store,
+        timeout_seconds=settings.provider_timeout_seconds,
+        max_retries=settings.provider_max_retries,
+    )
+    return {
+        "message": "Mock-mode eval completed without live provider credentials.",
+        "eval_run": report,
+        "traces": [
+            _trace_payload(trace)
+            for trace in trace_store.list_by_eval_run_id(report["eval_run_id"])
+        ],
+        "cli": {
+            "run": (
+                f"llm-platform eval run {_trace_db_arg()} "
+                f"--session-id {eval_request.session_id}"
+            ),
+            "show": f"llm-platform eval show {report['eval_run_id']} {_trace_db_arg()}",
+        },
+    }
+
+
+@app.get("/api/console/evals/{eval_run_id}")
+def console_eval_json(eval_run_id: str) -> dict[str, Any]:
+    run = eval_store.get_run(eval_run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Eval run not found: {eval_run_id}")
+    eval_run = _eval_run_payload(run)
+    return {
+        "eval_run": eval_run,
+        "traces": [_trace_payload(trace) for trace in trace_store.list_by_eval_run_id(eval_run_id)],
+        "cli": eval_run["cli"],
+    }
+
+
+@app.get("/api/console/prompts")
+def console_prompts_json() -> dict[str, Any]:
+    return {
+        "prompts": [
+            _prompt_payload(prompt.prompt_id)
+            for prompt in PromptRegistry().list()
+        ],
+        "cli": {"list": "llm-platform prompts list"},
+    }
+
+
+@app.get("/api/console/prompts/{prompt_id}")
+def console_prompt_json(
+    prompt_id: str,
+    version: int | None = Query(default=None),
+) -> dict[str, Any]:
+    prompt = _prompt_payload(prompt_id, version=version)
+    return {"prompt": prompt, "cli": prompt["cli"]}
+
+
+@app.get("/api/console/providers")
+def console_providers_json() -> dict[str, Any]:
+    return {
+        "providers": [_provider_payload(provider) for provider in ["mock", "openai", "custom"]],
+        "active_provider": settings.provider,
+        "cli": {"health": "llm-platform health"},
+    }
+
+
+@app.post("/api/console/providers/{provider_name}/test")
+def console_provider_test_json(provider_name: str) -> dict[str, Any]:
+    provider = _provider_payload(provider_name)
+    return {
+        "provider": provider,
+        "test": {
+            "status": "ready" if provider["ready"] else "not_configured",
+            "live_call_performed": False,
+            "message": (
+                "Mock provider is ready for local demos."
+                if provider_name == "mock"
+                else "Configuration metadata checked; no live provider call was made."
+            ),
+        },
+        "cli": {"health": "llm-platform health"},
+    }
+
+
+@app.get("/api/console/reviews")
+def console_reviews_json(
+    include_decided: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    return {
+        **_review_queue_payload(limit=limit, include_decided=include_decided),
+        "cli": {"traces": f"llm-platform trace list {_trace_db_arg()} --limit {limit}"},
+        "links": {"ui": "/reviews"},
+    }
+
+
+@app.get("/api/console/settings")
+def console_settings_json() -> dict[str, Any]:
+    return _settings_payload()
+
+
+@app.patch("/api/console/settings")
+def console_settings_update_json(request: ConsoleSettingsUpdateRequest) -> dict[str, Any]:
+    try:
+        write_user_env(request.settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _reload_runtime_settings()
+    return {
+        "message": "Updated user.env and reloaded runtime settings. The private .env file was not touched.",
+        "updated_keys": sorted(request.settings),
+        "settings": _settings_payload(),
+    }
 
 
 @app.post("/classify-ticket")

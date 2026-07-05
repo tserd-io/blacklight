@@ -12,6 +12,7 @@ dist/
 build/
 *.egg-info/
 .env
+user.env
 *.db
 *.sqlite
 traces.sqlite3
