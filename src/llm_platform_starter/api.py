@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import uuid
 from html import escape
-from urllib.parse import parse_qs
 from typing import Any
+from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -15,10 +16,13 @@ from llm_platform_starter.observability.idempotency import (
     IdempotencyInProgressError,
     IdempotencyStore,
 )
+from llm_platform_starter.observability.evaluations import EvalMetricStore
 from llm_platform_starter.observability.reviews import ReviewDecisionStore
 from llm_platform_starter.observability.storage import TraceStore
 from llm_platform_starter.providers.factory import ProviderConfigurationError, create_provider
+from llm_platform_starter.providers.mock import MockProvider
 from llm_platform_starter.providers.reliability import ProviderCallError
+from llm_platform_starter.prompts.registry import PromptRegistry
 from llm_platform_starter.session_history import (
     build_session_history,
     session_trace_detail,
@@ -28,9 +32,23 @@ from llm_platform_starter.settings import load_settings
 settings = load_settings()
 trace_store = TraceStore(settings.trace_db_path)
 idempotency_store = IdempotencyStore(settings.trace_db_path)
+eval_store = EvalMetricStore(settings.trace_db_path)
 review_store = ReviewDecisionStore(settings.trace_db_path)
 classifier: TicketClassifier | None = None
 classifier_startup_error: ProviderConfigurationError | None = None
+
+CONSOLE_NAV = [
+    ("dashboard", "Dashboard", "/console"),
+    ("workflows", "Workflows", "/console/workflows"),
+    ("runs", "Runs", "/console/runs"),
+    ("traces", "Traces", "/console/traces"),
+    ("evals", "Evals", "/console/evals"),
+    ("prompts", "Prompts", "/console/prompts"),
+    ("providers", "Providers", "/console/providers"),
+    ("review", "Review Queue", "/console/review"),
+    ("settings", "Settings", "/console/settings"),
+    ("docs", "Docs", "/console/docs"),
+]
 
 
 class ReviewDecisionRequest(BaseModel):
@@ -159,6 +177,371 @@ def _record_review_decision(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _cli_command(command: str) -> str:
+    return f'<code>{escape(command)}</code>'
+
+
+def _console_shell(*, active: str, title: str, body: str) -> HTMLResponse:
+    nav = "\n".join(
+        (
+            f'<a class="nav-item {"active" if key == active else ""}" '
+            f'href="{href}">{escape(label)}</a>'
+        )
+        for key, label, href in CONSOLE_NAV
+    )
+    return HTMLResponse(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escape(title)} - Blacklight Studio</title>
+  <style>
+    body {{ margin: 0; font-family: Arial, sans-serif; color: #1f2933; background: #f6f8fb; }}
+    .shell {{ display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }}
+    .sidebar {{ background: #17202a; color: #fff; padding: 20px 14px; }}
+    .brand {{ font-size: 18px; font-weight: 700; margin: 0 0 18px; }}
+    .nav {{ display: grid; gap: 4px; }}
+    .nav-item {{ color: #dce5ef; text-decoration: none; padding: 9px 10px; border-radius: 6px; }}
+    .nav-item.active, .nav-item:hover {{ background: #2d3a49; color: #fff; }}
+    main {{ padding: 28px 28px 44px; max-width: 1240px; }}
+    h1 {{ font-size: 24px; margin: 0 0 4px; }}
+    h2 {{ font-size: 17px; margin: 0 0 10px; }}
+    .muted {{ color: #5d6878; font-size: 14px; margin: 0 0 18px; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 16px 0; }}
+    .panel {{ background: #fff; border: 1px solid #d8dee8; border-radius: 8px; padding: 14px; }}
+    .panel p {{ margin: 6px 0 0; }}
+    .metric {{ font-size: 24px; font-weight: 700; }}
+    .toolbar {{ display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }}
+    button, .button {{ border: 1px solid #243447; border-radius: 6px; background: #243447; color: #fff; padding: 8px 11px; text-decoration: none; cursor: pointer; }}
+    .button.secondary {{ background: #fff; color: #243447; }}
+    table {{ width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #d8dee8; margin-top: 12px; }}
+    th, td {{ border-bottom: 1px solid #e2e8f0; padding: 10px; text-align: left; vertical-align: top; font-size: 14px; }}
+    th {{ background: #edf2f7; font-size: 12px; text-transform: uppercase; color: #526071; }}
+    code {{ background: #eef2f6; border: 1px solid #d8dee8; border-radius: 6px; padding: 2px 5px; }}
+    .status {{ display: inline-block; border-radius: 999px; padding: 4px 8px; font-size: 12px; background: #edf2f7; }}
+    .status.failed, .status.rejected {{ background: #ffe8e8; color: #991b1b; }}
+    .status.needs_review, .status.pending {{ background: #fff4d6; color: #8a5a00; }}
+    .status.accepted, .status.approved {{ background: #def7ec; color: #046c4e; }}
+    .empty {{ color: #64748b; text-align: center; }}
+    a {{ color: #1d4ed8; }}
+    @media (max-width: 820px) {{
+      .shell {{ grid-template-columns: 1fr; }}
+      .sidebar {{ position: static; }}
+      .nav {{ grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }}
+      main {{ padding: 20px; }}
+      table, thead, tbody, tr, th, td {{ display: block; }}
+      thead {{ display: none; }}
+      tr {{ border-bottom: 1px solid #d8dee8; }}
+      td {{ border-bottom: 0; }}
+      td::before {{ content: attr(data-label); display: block; color: #64748b; font-size: 12px; margin-bottom: 3px; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">Blacklight Studio</div>
+      <nav class="nav" aria-label="Console navigation">{nav}</nav>
+    </aside>
+    <main>{body}</main>
+  </div>
+</body>
+</html>"""
+    )
+
+
+def _console_command_panel(command: str) -> str:
+    return f'<div class="panel"><h2>CLI Equivalent</h2><p>{_cli_command(command)}</p></div>'
+
+
+def _render_console_dashboard() -> HTMLResponse:
+    metrics_payload = trace_store.metrics()
+    recent_traces = trace_store.list_recent(limit=5)
+    eval_runs = eval_store.list_runs(limit=5)
+    review_payload = _review_queue_payload(limit=100, include_decided=False)
+    trace_rows = "\n".join(_console_trace_row(trace) for trace in recent_traces)
+    if not trace_rows:
+        trace_rows = '<tr><td colspan="5" class="empty">No traces yet.</td></tr>'
+    eval_rows = "\n".join(_console_eval_row(run) for run in eval_runs)
+    if not eval_rows:
+        eval_rows = '<tr><td colspan="5" class="empty">No eval runs yet.</td></tr>'
+    body = f"""
+<h1>Dashboard</h1>
+<p class="muted">Local console for workflow runs, traces, evals, prompts, providers, and review.</p>
+<div class="toolbar">
+  <form method="post" action="/console/run-demo"><button type="submit">Run Demo</button></form>
+  <a class="button secondary" href="/console/traces">Recent Traces</a>
+  <a class="button secondary" href="/console/evals">Recent Evals</a>
+  <a class="button secondary" href="/reviews">Review Queue</a>
+</div>
+<section class="grid">
+  <div class="panel"><h2>Requests</h2><div class="metric">{metrics_payload["request_count"]}</div></div>
+  <div class="panel"><h2>Failure Rate</h2><div class="metric">{metrics_payload["failure_rate"]}</div></div>
+  <div class="panel"><h2>Total Cost</h2><div class="metric">{_money(metrics_payload["total_estimated_cost_usd"])}</div></div>
+  <div class="panel"><h2>Pending Review</h2><div class="metric">{review_payload["summary"]["pending_count"]}</div></div>
+</section>
+<section class="grid">
+  {_console_command_panel("llm-platform demo --verbose")}
+  {_console_command_panel("llm-platform seed demo-data --trace-db-path traces.sqlite3")}
+</section>
+<h2>Recent Traces</h2>
+<table>
+  <thead><tr><th>Time</th><th>Request</th><th>Session</th><th>Status</th><th>Inspect</th></tr></thead>
+  <tbody>{trace_rows}</tbody>
+</table>
+<h2 style="margin-top:18px;">Recent Evals</h2>
+<table>
+  <thead><tr><th>Run</th><th>Session</th><th>Prompt</th><th>Accuracy</th><th>Inspect</th></tr></thead>
+  <tbody>{eval_rows}</tbody>
+</table>"""
+    return _console_shell(active="dashboard", title="Dashboard", body=body)
+
+
+def _console_trace_row(trace: dict[str, Any]) -> str:
+    detail = session_trace_detail(trace)
+    status = escape(detail["status"])
+    session_id = escape(trace["session_id"])
+    request_id = escape(trace["request_id"])
+    inspect_href = (
+        f"/sessions/{session_id}/review/{request_id}"
+        if detail["reviewable"]
+        else f"/sessions/{session_id}"
+    )
+    return f"""<tr>
+  <td data-label="Time">{escape(trace["created_at"])}</td>
+  <td data-label="Request"><code>{request_id}</code></td>
+  <td data-label="Session"><a href="/sessions/{session_id}">{session_id}</a></td>
+  <td data-label="Status"><span class="status {status}">{escape(_label(status))}</span></td>
+  <td data-label="Inspect"><a href="{inspect_href}">Open</a></td>
+</tr>"""
+
+
+def _console_eval_row(run: dict[str, Any]) -> str:
+    eval_run_id = escape(run["eval_run_id"])
+    session_id = escape(run["session_id"])
+    return f"""<tr>
+  <td data-label="Run"><code>{eval_run_id}</code></td>
+  <td data-label="Session"><a href="/sessions/{session_id}">{session_id}</a></td>
+  <td data-label="Prompt">{escape(run["prompt_id"])} v{run["prompt_version"]}</td>
+  <td data-label="Accuracy">{run["accuracy"]}</td>
+  <td data-label="Inspect">{_cli_command(f"llm-platform eval show {run['eval_run_id']} --trace-db-path {settings.trace_db_path}")}</td>
+</tr>"""
+
+
+def _run_console_demo() -> dict[str, Any]:
+    demo_classifier = TicketClassifier(
+        provider=MockProvider(),
+        model=settings.model,
+        trace_store=trace_store,
+        idempotency_store=idempotency_store,
+        provider_timeout_seconds=settings.provider_timeout_seconds,
+        provider_max_retries=settings.provider_max_retries,
+        provider_rate_limit_requests=settings.provider_rate_limit_requests,
+        provider_rate_limit_window_seconds=settings.provider_rate_limit_window_seconds,
+    )
+    result = demo_classifier.classify(
+        TicketRequest(
+            subject="Refund request",
+            body="Customer asks for a refund after duplicate billing.",
+            session_id="console-demo",
+            idempotency_key=f"console-demo-{uuid.uuid4()}",
+        )
+    )
+    trace = trace_store.list_by_session_id("console-demo", limit=500)[-1]
+    return {"result": result.model_dump(mode="json"), "trace": trace}
+
+
+def _render_console_demo_result(payload: dict[str, Any]) -> HTMLResponse:
+    trace = payload["trace"]
+    result = payload["result"]
+    session_id = escape(trace["session_id"])
+    request_id = escape(trace["request_id"])
+    body = f"""
+<h1>Demo Result</h1>
+<p class="muted">ticket_classifier / mock provider</p>
+<section class="grid">
+  <div class="panel"><h2>Category</h2><div class="metric">{escape(result["category"])}</div></div>
+  <div class="panel"><h2>Severity</h2><div class="metric">{escape(result["severity"])}</div></div>
+  <div class="panel"><h2>Review</h2><div class="metric">{escape(str(result["needs_review"]))}</div></div>
+</section>
+<div class="toolbar">
+  <a class="button" href="/sessions/{session_id}">Open Session</a>
+  <a class="button secondary" href="/console/traces">Open Traces</a>
+</div>
+<section class="grid">
+  <div class="panel"><h2>Trace</h2><p><code>{request_id}</code></p></div>
+  {_console_command_panel("llm-platform demo --verbose")}
+  {_console_command_panel(f"llm-platform trace show {trace['request_id']} --trace-db-path {settings.trace_db_path}")}
+</section>"""
+    return _console_shell(active="workflows", title="Demo Result", body=body)
+
+
+def _render_console_workflows() -> HTMLResponse:
+    body = f"""
+<h1>Workflows</h1>
+<p class="muted">Runnable workflow surfaces.</p>
+<section class="grid">
+  <div class="panel">
+    <h2>ticket_classifier</h2>
+    <p>Provider: {escape(settings.provider)}</p>
+    <p>Model: {escape(settings.model)}</p>
+    <div class="toolbar"><form method="post" action="/console/run-demo"><button type="submit">Run Demo</button></form></div>
+  </div>
+  {_console_command_panel('llm-platform classify --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --session-id demo')}
+</section>"""
+    return _console_shell(active="workflows", title="Workflows", body=body)
+
+
+def _render_console_runs() -> HTMLResponse:
+    traces = trace_store.list_recent(limit=50)
+    sessions: dict[str, dict[str, Any]] = {}
+    for trace in traces:
+        session = sessions.setdefault(
+            trace["session_id"],
+            {"session_id": trace["session_id"], "request_count": 0, "latest": trace["created_at"]},
+        )
+        session["request_count"] += 1
+    rows = "\n".join(
+        f"""<tr>
+  <td data-label="Session"><a href="/sessions/{escape(item['session_id'])}">{escape(item['session_id'])}</a></td>
+  <td data-label="Requests">{item["request_count"]}</td>
+  <td data-label="Latest">{escape(item["latest"])}</td>
+  <td data-label="CLI">{_cli_command(f"llm-platform session show {item['session_id']} --trace-db-path {settings.trace_db_path}")}</td>
+</tr>"""
+        for item in sessions.values()
+    )
+    if not rows:
+        rows = '<tr><td colspan="4" class="empty">No runs yet.</td></tr>'
+    body = f"""
+<h1>Runs</h1>
+<p class="muted">Session-level workflow history.</p>
+<table>
+  <thead><tr><th>Session</th><th>Requests</th><th>Latest</th><th>CLI</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"""
+    return _console_shell(active="runs", title="Runs", body=body)
+
+
+def _render_console_traces() -> HTMLResponse:
+    rows = "\n".join(_console_trace_row(trace) for trace in trace_store.list_recent(limit=25))
+    if not rows:
+        rows = '<tr><td colspan="5" class="empty">No traces yet.</td></tr>'
+    body = f"""
+<h1>Traces</h1>
+<p class="muted">Recent provider calls and validation outcomes.</p>
+<section class="grid">{_console_command_panel("llm-platform trace list --trace-db-path traces.sqlite3 --limit 10")}</section>
+<table>
+  <thead><tr><th>Time</th><th>Request</th><th>Session</th><th>Status</th><th>Inspect</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"""
+    return _console_shell(active="traces", title="Traces", body=body)
+
+
+def _render_console_evals() -> HTMLResponse:
+    rows = "\n".join(_console_eval_row(run) for run in eval_store.list_runs(limit=25))
+    if not rows:
+        rows = '<tr><td colspan="5" class="empty">No eval runs yet.</td></tr>'
+    body = f"""
+<h1>Evals</h1>
+<p class="muted">Persisted regression reports.</p>
+<section class="grid">
+  {_console_command_panel("llm-platform eval run --trace-db-path traces.sqlite3 --session-id eval-demo")}
+  {_console_command_panel("llm-platform eval list --trace-db-path traces.sqlite3")}
+</section>
+<table>
+  <thead><tr><th>Run</th><th>Session</th><th>Prompt</th><th>Accuracy</th><th>Inspect</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"""
+    return _console_shell(active="evals", title="Evals", body=body)
+
+
+def _render_console_prompts() -> HTMLResponse:
+    prompts = PromptRegistry().list()
+    rows = "\n".join(
+        f"""<tr>
+  <td data-label="Prompt">{escape(prompt.prompt_id)}</td>
+  <td data-label="Version">{prompt.version}</td>
+  <td data-label="Schema">{escape(prompt.output_schema)}</td>
+  <td data-label="Group">{escape(prompt.comparison_group)}</td>
+  <td data-label="CLI">{_cli_command(f"llm-platform prompts show {prompt.prompt_id}")}</td>
+</tr>"""
+        for prompt in prompts
+    )
+    body = f"""
+<h1>Prompts</h1>
+<p class="muted">Prompt registry metadata.</p>
+<section class="grid">{_console_command_panel("llm-platform prompts list")}</section>
+<table>
+  <thead><tr><th>Prompt</th><th>Version</th><th>Schema</th><th>Group</th><th>CLI</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"""
+    return _console_shell(active="prompts", title="Prompts", body=body)
+
+
+def _render_console_providers() -> HTMLResponse:
+    body = f"""
+<h1>Providers</h1>
+<p class="muted">Runtime provider readiness.</p>
+<section class="grid">
+  <div class="panel"><h2>Provider</h2><div class="metric">{escape(settings.provider)}</div></div>
+  <div class="panel"><h2>Model</h2><div class="metric">{escape(settings.model)}</div></div>
+  <div class="panel"><h2>OpenAI Key</h2><div class="metric">{escape(str(bool(settings.openai_api_key)))}</div></div>
+  <div class="panel"><h2>Custom Provider</h2><div class="metric">{escape(str(bool(settings.custom_provider_path)))}</div></div>
+  {_console_command_panel("llm-platform health")}
+</section>"""
+    return _console_shell(active="providers", title="Providers", body=body)
+
+
+def _render_console_review() -> HTMLResponse:
+    payload = _review_queue_payload(limit=100, include_decided=True)
+    body = f"""
+<h1>Review Queue</h1>
+<p class="muted">Business review status for guarded outputs.</p>
+<section class="grid">
+  <div class="panel"><h2>Items</h2><div class="metric">{payload["summary"]["item_count"]}</div></div>
+  <div class="panel"><h2>Blocked</h2><div class="metric">{payload["summary"]["blocked_count"]}</div></div>
+  <div class="panel"><h2>Pending</h2><div class="metric">{payload["summary"]["pending_count"]}</div></div>
+  <div class="panel"><h2>Approved</h2><div class="metric">{payload["summary"]["approved_count"]}</div></div>
+  <div class="panel"><h2>Queue</h2><p><a href="/reviews">Open review queue</a></p></div>
+  {_console_command_panel("llm-platform trace list --trace-db-path traces.sqlite3 --limit 10")}
+</section>"""
+    return _console_shell(active="review", title="Review Queue", body=body)
+
+
+def _render_console_settings() -> HTMLResponse:
+    body = f"""
+<h1>Settings</h1>
+<p class="muted">Local runtime settings.</p>
+<section class="grid">
+  <div class="panel"><h2>Trace DB</h2><p><code>{escape(settings.trace_db_path)}</code></p></div>
+  <div class="panel"><h2>Timeout</h2><div class="metric">{settings.provider_timeout_seconds}</div></div>
+  <div class="panel"><h2>Retries</h2><div class="metric">{settings.provider_max_retries}</div></div>
+  <div class="panel"><h2>Rate Limit</h2><p>{settings.provider_rate_limit_requests} / {settings.provider_rate_limit_window_seconds}s</p></div>
+  {_console_command_panel("llm-platform health")}
+</section>"""
+    return _console_shell(active="settings", title="Settings", body=body)
+
+
+def _render_console_docs() -> HTMLResponse:
+    links = [
+        ("Architecture", "/docs/architecture.md"),
+        ("Provider Configuration", "/docs/provider-configuration.md"),
+        ("Eval Methodology", "/docs/eval-methodology.md"),
+        ("Create Your Own Workflow", "/docs/create-your-own-workflow.md"),
+        ("Tradeoffs", "/docs/tradeoffs.md"),
+    ]
+    items = "\n".join(
+        f'<div class="panel"><h2>{escape(label)}</h2><p><code>{escape(path)}</code></p></div>'
+        for label, path in links
+    )
+    body = f"""
+<h1>Docs And Recipes</h1>
+<p class="muted">Local docs paths for implementation review.</p>
+<section class="grid">{items}</section>"""
+    return _console_shell(active="docs", title="Docs And Recipes", body=body)
 
 
 def _filter_link(session_id: str, status: str, current_status: str, limit: int) -> str:
@@ -441,6 +824,66 @@ def validation_error_handler(_request: Any, exc: GuardrailValidationError) -> JS
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+def root_console() -> RedirectResponse:
+    return RedirectResponse(url="/console", status_code=307)
+
+
+@app.get("/console", response_class=HTMLResponse)
+def console_dashboard() -> HTMLResponse:
+    return _render_console_dashboard()
+
+
+@app.post("/console/run-demo", response_class=HTMLResponse)
+def console_run_demo() -> HTMLResponse:
+    return _render_console_demo_result(_run_console_demo())
+
+
+@app.get("/console/workflows", response_class=HTMLResponse)
+def console_workflows() -> HTMLResponse:
+    return _render_console_workflows()
+
+
+@app.get("/console/runs", response_class=HTMLResponse)
+def console_runs() -> HTMLResponse:
+    return _render_console_runs()
+
+
+@app.get("/console/traces", response_class=HTMLResponse)
+def console_traces() -> HTMLResponse:
+    return _render_console_traces()
+
+
+@app.get("/console/evals", response_class=HTMLResponse)
+def console_evals() -> HTMLResponse:
+    return _render_console_evals()
+
+
+@app.get("/console/prompts", response_class=HTMLResponse)
+def console_prompts() -> HTMLResponse:
+    return _render_console_prompts()
+
+
+@app.get("/console/providers", response_class=HTMLResponse)
+def console_providers() -> HTMLResponse:
+    return _render_console_providers()
+
+
+@app.get("/console/review", response_class=HTMLResponse)
+def console_review() -> HTMLResponse:
+    return _render_console_review()
+
+
+@app.get("/console/settings", response_class=HTMLResponse)
+def console_settings() -> HTMLResponse:
+    return _render_console_settings()
+
+
+@app.get("/console/docs", response_class=HTMLResponse)
+def console_docs() -> HTMLResponse:
+    return _render_console_docs()
 
 
 @app.post("/classify-ticket")

@@ -1,10 +1,13 @@
 import importlib
+from dataclasses import replace
 
 from fastapi.testclient import TestClient
 
 from llm_platform_starter import api
+from llm_platform_starter.demo_seed import seed_demo_data
 from llm_platform_starter.errors import GuardrailValidationError
 from llm_platform_starter.models import GuardrailOutcome, TraceRecord
+from llm_platform_starter.observability.evaluations import EvalMetricStore
 from llm_platform_starter.observability.reviews import ReviewDecisionStore
 from llm_platform_starter.observability.storage import TraceStore
 from llm_platform_starter.providers.factory import ProviderConfigurationError
@@ -113,6 +116,19 @@ def _patch_review_stores(monkeypatch, tmp_path):
     return trace_store, review_store
 
 
+def _patch_seeded_console_stores(monkeypatch, tmp_path):
+    db_path = tmp_path / "console.sqlite3"
+    seed_demo_data(str(db_path))
+    trace_store = TraceStore(db_path)
+    eval_store = EvalMetricStore(db_path)
+    review_store = ReviewDecisionStore(db_path)
+    monkeypatch.setattr(api, "trace_store", trace_store)
+    monkeypatch.setattr(api, "eval_store", eval_store)
+    monkeypatch.setattr(api, "review_store", review_store)
+    monkeypatch.setattr(api, "settings", replace(api.settings, trace_db_path=str(db_path)))
+    return trace_store, eval_store, review_store
+
+
 def test_metrics_endpoint_returns_expanded_trace_metrics(tmp_path):
     original_trace_store = api.trace_store
     store = TraceStore(tmp_path / "traces.sqlite3")
@@ -150,6 +166,61 @@ def test_metrics_endpoint_returns_expanded_trace_metrics(tmp_path):
     assert payload["by_model"][0]["model"] == "mock-ticket-classifier"
     assert payload["by_provider_model"][0]["provider"] == "mock"
     assert payload["by_guardrail_outcome"][0]["guardrail_outcome"] == "rejected"
+
+
+def test_console_dashboard_exposes_demo_and_recent_inspection_links(monkeypatch, tmp_path):
+    _patch_seeded_console_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).get("/console")
+
+    assert response.status_code == 200
+    assert "Blacklight Studio" in response.text
+    assert "Run Demo" in response.text
+    assert "/console/workflows" in response.text
+    assert "/console/traces" in response.text
+    assert "/console/evals" in response.text
+    assert "/console/review" in response.text
+    assert "seed-demo:billing-success" in response.text
+    assert "seed-demo-eval" in response.text
+    assert "llm-platform demo --verbose" in response.text
+    assert "llm-platform seed demo-data" in response.text
+
+
+def test_console_surfaces_render_navigation_and_cli_equivalents(monkeypatch, tmp_path):
+    _patch_seeded_console_stores(monkeypatch, tmp_path)
+    client = TestClient(api.app)
+    expected = {
+        "/console/workflows": "llm-platform classify",
+        "/console/runs": "llm-platform session show",
+        "/console/traces": "llm-platform trace list",
+        "/console/evals": "llm-platform eval list",
+        "/console/prompts": "llm-platform prompts list",
+        "/console/providers": "llm-platform health",
+        "/console/review": "Review Queue",
+        "/console/settings": "llm-platform health",
+        "/console/docs": "Docs And Recipes",
+    }
+
+    for path, expected_text in expected.items():
+        response = client.get(path)
+        assert response.status_code == 200
+        assert "Blacklight Studio" in response.text
+        assert expected_text in response.text
+
+
+def test_console_run_demo_links_result_to_trace_and_session(monkeypatch, tmp_path):
+    trace_store, _eval_store, _review_store = _patch_seeded_console_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).post("/console/run-demo")
+    traces = trace_store.list_by_session_id("console-demo", limit=10)
+
+    assert response.status_code == 200
+    assert "Demo Result" in response.text
+    assert "billing" in response.text
+    assert "/sessions/console-demo" in response.text
+    assert "llm-platform trace show" in response.text
+    assert len(traces) == 1
+    assert traces[0]["session_id"] == "console-demo"
 
 
 def test_session_history_json_returns_filtered_session_timeline(monkeypatch, tmp_path):
