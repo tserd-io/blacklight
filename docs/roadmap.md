@@ -36,10 +36,12 @@ Milestone 2 is complete as an observability and guardrail hardening pass. The pr
 
 - Complete the public [issue ticket packages](issues/index.md):
   - [Milestone 3: Portfolio-Grade Documentation](issues/milestone-3.md)
-  - [Milestone 4: Packaging And Release](issues/milestone-4.md)
-- Add prompt version comparison report
+  - [Milestone 4: CLI-Ready Package And Release](issues/milestone-4.md)
+  - [Milestone 5: Business-User App Productization](issues/milestone-5.md)
 - Add architecture screenshots or terminal examples to the README
-- Add a lightweight Dockerfile
+- Add a lightweight Dockerfile for API/CLI smoke testing
+- Add operational cost and ownership guidance for regular live runs
+- Add session history trace view for operational review
 
 ## Later
 
@@ -47,3 +49,4 @@ Milestone 2 is complete as an observability and guardrail hardening pass. The pr
 - Add OpenTelemetry export
 - Add RAG policy-question example
 - Add deployment notes for container platforms
+- Explore a packaged desktop app with an installer, app icon, first-run setup, local model management, and hosted-provider fallback
