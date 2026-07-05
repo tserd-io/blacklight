@@ -1,12 +1,14 @@
-# llm-platform-starter
+# Blacklight Studio
 
-A compact internal LLM platform starter that shows how teams can route model calls through shared provider, prompt, eval, guardrail, and observability layers instead of scattering one-off prompts across applications.
+![Blacklight Studio logo](docs/assets/blacklight-studio-readme-logo.png)
+
+Blacklight Studio is a compact internal AI workflow studio that shows how teams can route model calls through shared provider, prompt, eval, guardrail, and observability layers instead of scattering one-off prompts across applications.
 
 The default path is fully local and deterministic: it uses a mock provider, synthetic support-ticket data, SQLite traces, and pytest coverage. Optional provider adapters can be added without making live API keys required for development or CI.
 
 ## Why This Exists
 
-LLM applications tend to need the same platform primitives once they move past experiments:
+AI applications tend to need the same platform primitives once they move past experiments:
 
 - provider routing with consistent request and response objects
 - versioned prompts with inspectable metadata
@@ -15,7 +17,7 @@ LLM applications tend to need the same platform primitives once they move past e
 - traces that connect latency, token use, cost, failures, and validation outcomes
 - CLI/API surfaces that are easy to smoke test locally
 
-This repo keeps those ideas small enough to read quickly while still runnable end to end.
+Blacklight Studio keeps those ideas small enough to read quickly while still runnable end to end.
 
 ## What To Review First
 
@@ -40,7 +42,7 @@ This repo keeps those ideas small enough to read quickly while still runnable en
 - Retry, timeout, per-session rate limiting, and idempotency support
 - SQLite traces for latency, tokens, estimated cost, validation, guardrail outcome, and provider failure categories
 - Persisted eval run/case metrics linked back to trace records
-- CLI commands for classification, evals, metrics, health, prompts, and traces
+- CLI commands for guided demos, classification, evals, metrics, health, prompts, and traces
 - FastAPI surface for the ticket-classification workflow
 
 ## Quick Start
@@ -70,6 +72,14 @@ Expected default signal:
 ```
 
 The mock provider is the intended fresh-clone path. No API key is required.
+
+Run the guided first demo:
+
+```bash
+llm-platform demo --verbose
+```
+
+The demo uses the mock provider, runs the `ticket_classifier` workflow with synthetic sample input, writes a trace, and prints the exact follow-up commands for trace inspection, evals, and the equivalent lower-level workflow call.
 
 ## CLI Example
 
@@ -347,7 +357,7 @@ python -m llm_platform_starter.examples.document_extraction
 
 ## Production Extensions
 
-This starter intentionally uses local, inspectable defaults. A production version would likely add:
+Blacklight Studio intentionally uses local, inspectable defaults. A production version would likely add:
 
 - managed trace storage or OpenTelemetry export
 - stronger PII/secrets detection and policy-specific guardrails
