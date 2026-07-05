@@ -1,9 +1,11 @@
 import importlib
+import shlex
 from dataclasses import replace
 
 from fastapi.testclient import TestClient
 
 from llm_platform_starter import api
+from llm_platform_starter.cli import build_parser
 from llm_platform_starter.demo_seed import seed_demo_data
 from llm_platform_starter.errors import GuardrailValidationError
 from llm_platform_starter.models import GuardrailOutcome, TraceRecord
@@ -26,6 +28,13 @@ class ProviderFailureClassifier:
             category="provider_timeout",
             attempts=3,
         )
+
+
+def _assert_cli_command_parseable(command: str) -> None:
+    assert command.startswith("llm-platform ")
+    assert "<" not in command
+    assert ">" not in command
+    build_parser().parse_args(shlex.split(command)[1:])
 
 
 def _build_session_history_store(tmp_path):
@@ -260,8 +269,11 @@ def test_console_api_workflow_run_returns_result_trace_and_cli(monkeypatch, tmp_
     assert payload["result"]["category"] == "billing"
     assert payload["trace"]["session_id"] == "api-workflow"
     assert payload["trace"]["links"]["session_api"] == "/api/sessions/api-workflow"
+    assert payload["cli_command"] == payload["cli_commands"]["primary"]
     assert "llm-platform classify" in payload["cli"]["equivalent_run"]
     assert "llm-platform trace show" in payload["cli"]["trace"]
+    _assert_cli_command_parseable(payload["cli_command"])
+    _assert_cli_command_parseable(payload["cli_commands"]["trace"])
     assert len(traces) == 1
 
 
@@ -290,7 +302,11 @@ def test_console_api_surfaces_return_state_and_cli(monkeypatch, tmp_path):
 
         assert response.status_code == 200
         assert expected_key in payload
-        assert "cli" in payload or expected_key in {"trace", "eval_run", "prompt", "provider"}
+        assert "cli_command" in payload
+        assert "cli_commands" in payload
+        assert "cli" in payload
+        assert payload["cli_command"] == payload["cli_commands"]["primary"]
+        _assert_cli_command_parseable(payload["cli_command"])
 
 
 def test_console_api_eval_run_uses_mock_mode_and_persists_links(monkeypatch, tmp_path):
@@ -310,7 +326,9 @@ def test_console_api_eval_run_uses_mock_mode_and_persists_links(monkeypatch, tmp
     assert payload["eval_run"]["summary"]["case_count"] == 3
     assert len(payload["traces"]) == 3
     assert payload["traces"][0]["eval_run_id"] == eval_run_id
+    assert payload["cli_command"] == payload["cli_commands"]["run"]
     assert "llm-platform eval show" in payload["cli"]["show"]
+    _assert_cli_command_parseable(payload["cli_commands"]["show"])
     assert stored is not None
     assert stored["session_id"] == "api-eval"
 
@@ -325,7 +343,39 @@ def test_console_api_provider_test_does_not_require_live_keys(monkeypatch, tmp_p
     assert payload["provider"]["provider"] == "openai"
     assert payload["test"]["live_call_performed"] is False
     assert payload["test"]["status"] == "not_configured"
+    assert payload["cli_command"] == "llm-platform health"
     assert payload["cli"]["health"] == "llm-platform health"
+    _assert_cli_command_parseable(payload["cli_command"])
+
+
+def test_console_api_cli_affordances_include_prompt_compare_and_review_queue(monkeypatch, tmp_path):
+    _patch_seeded_console_stores(monkeypatch, tmp_path)
+    client = TestClient(api.app)
+
+    prompts_response = client.get("/api/console/prompts/ticket_classifier")
+    reviews_response = client.get("/api/console/reviews")
+    dashboard_response = client.get("/api/dashboard")
+
+    prompts_payload = prompts_response.json()
+    reviews_payload = reviews_response.json()
+    dashboard_payload = dashboard_response.json()
+
+    assert prompts_response.status_code == 200
+    assert reviews_response.status_code == 200
+    assert dashboard_response.status_code == 200
+    assert prompts_payload["cli_commands"]["compare"] == (
+        "llm-platform eval compare --baseline-version 1 --candidate-version 2"
+    )
+    assert reviews_payload["cli_command"].startswith("llm-platform trace list")
+    assert dashboard_payload["cli_commands"]["guided_demo"].startswith("llm-platform demo")
+    for command in [
+        prompts_payload["cli_command"],
+        prompts_payload["cli_commands"]["compare"],
+        reviews_payload["cli_command"],
+        dashboard_payload["cli_commands"]["guided_demo"],
+        dashboard_payload["cli_commands"]["seed_demo_data"],
+    ]:
+        _assert_cli_command_parseable(command)
 
 
 def test_console_settings_update_writes_user_env_without_exposing_secrets(monkeypatch, tmp_path):
