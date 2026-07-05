@@ -74,6 +74,8 @@ Passed checks:
 - `llm-platform session show m4-final-cli --trace-db-path .tmp\milestone4-final-qa.sqlite3`
 - FastAPI `/health` smoke check
 - FastAPI `/classify-ticket` smoke check
+- Docker image build for `llm-platform-starter`
+- Docker container `/health` smoke check
 - internal Markdown link scan
 - `git diff --check`
 - `plans/` ignore check
@@ -81,7 +83,7 @@ Passed checks:
 
 Documented limitation:
 
-- Docker was not available on the local QA machine, so Docker image and Ollama runtime smoke checks were not run locally. The release includes Docker and Ollama configuration for environments where Docker is installed.
+- Ollama runtime smoke testing was not run as part of this release gate because it requires downloading local model weights. The release includes Ollama configuration and provider adapter support for opt-in local-model testing.
 
 Tag status:
 

@@ -53,9 +53,9 @@ Milestone 4 is complete as a CLI-ready package and release-preparation pass. The
 - operational cost and ownership guidance for regular live runs
 - session history trace review from the CLI
 - optional Ollama local-runtime configuration through the custom provider path
-- final QA checks for tests, linting, CLI smoke, API smoke, eval smoke, docs links, ignored private plans, and GitHub Actions
+- final QA checks for tests, linting, CLI smoke, API smoke, eval smoke, Docker image smoke, docs links, ignored private plans, and GitHub Actions
 
-Docker was not available on the local QA machine, so Docker and Ollama runtime smoke checks are recorded as a local limitation rather than a passed local check. The `v0.1.0` tag should be created only after final human approval.
+Ollama runtime smoke testing was not run as part of this release gate because it requires downloading local model weights. The `v0.1.0` tag should be created only after final human approval.
 
 ## Next
 
