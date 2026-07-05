@@ -196,3 +196,33 @@ Suggested labels:
 - `usability`
 - `developer`
 - `release`
+
+## Candidate. Add Ollama Local Runtime Configuration
+
+Purpose:
+Make the local-model path easier to test by providing a repo-owned Ollama runtime configuration without making Ollama, Docker, GPU access, or model downloads required for CI.
+
+Tasks:
+
+- Add a Docker Compose configuration for running Ollama locally.
+- Add or document a bundled Ollama provider adapter that uses the existing `custom` provider path.
+- Document how to pull a local model such as `llama3.1`.
+- Document the environment variables needed to point `llm-platform` at the local Ollama endpoint.
+- Keep `mock` as the default provider for quickstart and CI.
+- Add opt-in smoke-test guidance for a real Ollama runtime.
+- Clarify that model weights and runtime downloads are local developer artifacts, not files committed to the repo.
+
+Acceptance criteria:
+
+- A developer can start Ollama from repo instructions.
+- A developer can configure `LLM_PROVIDER=custom` and use the bundled Ollama adapter.
+- No default tests, CI jobs, Docker API smoke checks, or quickstart commands require Ollama.
+- The docs explain how local Ollama differs from hosted APIs, local fallback, and mock mode.
+- The issue can be extended later into real local-endpoint smoke tests with explicit environment flags.
+
+Suggested labels:
+
+- `provider-gateway`
+- `developer-experience`
+- `local-models`
+- `release`

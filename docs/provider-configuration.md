@@ -134,3 +134,36 @@ pytest tests/test_provider_configuration_smoke.py
 ```
 
 The local endpoint path uses the same `custom` provider contract, so Ollama, LM Studio, llama.cpp, vLLM, Transformers, or a private localhost service can be smoke-tested without changing application code.
+
+## Ollama Runtime Configuration
+
+The repository includes a lightweight Ollama configuration for local experiments. It does not vendor an Ollama binary or model weights into the repo. Docker downloads the runtime image when you start it, and `ollama pull` downloads the selected model into the local Docker volume.
+
+Start Ollama:
+
+```bash
+docker compose -f docker-compose.ollama.yml up -d
+```
+
+Download a local model:
+
+```bash
+docker compose -f docker-compose.ollama.yml exec ollama ollama pull llama3.1
+```
+
+Point the platform at the bundled Ollama adapter:
+
+```bash
+set LLM_PROVIDER=custom
+set LLM_CUSTOM_PROVIDER=llm_platform_starter.providers.ollama_provider:OllamaProvider
+set LLM_MODEL=llama3.1
+set OLLAMA_BASE_URL=http://localhost:11434
+```
+
+Then run the normal CLI path:
+
+```bash
+llm-platform classify --subject "Login error" --body "The export page fails after login."
+```
+
+This is a local-provider configuration path, not the default release path. CI and quickstart still use `mock` so they do not require Docker, Ollama, model downloads, GPU access, or live provider credentials.

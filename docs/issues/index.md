@@ -43,6 +43,7 @@ Each milestone ends with a final QA and approval ticket. That gate is meant to k
 - [#19 Add Provider Configuration Smoke Tests](https://github.com/tserd-io/llm-platform-starter/issues/19)
 - [#39 Add Operational Cost And Ownership Guide](https://github.com/tserd-io/llm-platform-starter/issues/39)
 - [#41 Add Session History Trace View](https://github.com/tserd-io/llm-platform-starter/issues/41)
+- [#62 Add Ollama Local Runtime Configuration](https://github.com/tserd-io/llm-platform-starter/issues/62)
 
 ### Milestone 5: Business-User App Productization
 

@@ -21,6 +21,7 @@ This repo keeps those ideas small enough to read quickly while still runnable en
 
 - [src/llm_platform_starter/examples/ticket_classifier.py](src/llm_platform_starter/examples/ticket_classifier.py): example workflow using prompts, providers, guardrails, retries, idempotency, and traces
 - [src/llm_platform_starter/providers/factory.py](src/llm_platform_starter/providers/factory.py): mock/OpenAI/custom provider selection
+- [docs/provider-configuration.md](docs/provider-configuration.md): OpenAI, custom provider, and Ollama local-runtime configuration
 - [src/llm_platform_starter/evals/runner.py](src/llm_platform_starter/evals/runner.py): deterministic regression evals
 - [src/llm_platform_starter/observability/storage.py](src/llm_platform_starter/observability/storage.py): SQLite trace store and metrics
 - [docs/architecture.md](docs/architecture.md): component boundaries and request flow
@@ -32,7 +33,7 @@ This repo keeps those ideas small enough to read quickly while still runnable en
 ## Features
 
 - Deterministic mock provider for local development and CI
-- Optional OpenAI provider and custom provider import path
+- Optional OpenAI provider, custom provider import path, and Ollama local-runtime configuration
 - Versioned prompt registry backed by JSON templates
 - Pydantic output validation and simple PII detection
 - Guardrail outcomes: `accepted`, `needs_review`, and `rejected`
@@ -316,7 +317,11 @@ set LLM_CUSTOM_PROVIDER=my_package.providers:MyProvider
 set LLM_MODEL=my-model
 ```
 
-`LLM_CUSTOM_PROVIDER` can point to an `LLMProvider` subclass, an `LLMProvider` instance, or a zero-argument factory returning one. Local model servers such as Ollama, LM Studio, llama.cpp, vLLM, or a private localhost endpoint can use the same custom provider path. See [docs/provider-configuration.md](docs/provider-configuration.md).
+`LLM_CUSTOM_PROVIDER` can point to an `LLMProvider` subclass, an `LLMProvider` instance, or a zero-argument factory returning one.
+
+The project is also configured for local model experiments with Ollama. Use the included `docker-compose.ollama.yml` to start Ollama, pull a model such as `llama3.1`, and point `LLM_CUSTOM_PROVIDER` at the bundled `llm_platform_starter.providers.ollama_provider:OllamaProvider` adapter. Users who already have their own provider, local endpoint, or model runtime can keep using the same custom-provider contract instead.
+
+Local model servers such as Ollama, LM Studio, llama.cpp, vLLM, or a private localhost endpoint can use the same custom provider path. See [docs/provider-configuration.md](docs/provider-configuration.md).
 
 ## Guardrails And Review Routing
 
