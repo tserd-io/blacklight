@@ -50,7 +50,6 @@ Milestone 3 is complete as a portfolio-grade documentation pass. The project now
   - [Milestone 5: Business-User App Productization](issues/milestone-5.md)
 - Add architecture screenshots or terminal examples to the README
 - Add a lightweight Dockerfile for API/CLI smoke testing
-- Add operational cost and ownership guidance for regular live runs
 - Add session history trace view for operational review
 
 ## Later

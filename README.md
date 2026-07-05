@@ -26,6 +26,7 @@ This repo keeps those ideas small enough to read quickly while still runnable en
 - [docs/architecture.md](docs/architecture.md): component boundaries and request flow
 - [docs/create-your-own-workflow.md](docs/create-your-own-workflow.md): guide for adapting the starter to a new task
 - [docs/tradeoffs.md](docs/tradeoffs.md): what is intentionally simplified
+- [docs/operational-cost-and-ownership.md](docs/operational-cost-and-ownership.md): cost and ownership model for regular live runs
 
 ## Features
 
@@ -342,7 +343,7 @@ This starter intentionally uses local, inspectable defaults. A production versio
 - deployment packaging and environment-specific configuration
 - live provider smoke tests gated behind secrets and explicit flags
 
-See [docs/tradeoffs.md](docs/tradeoffs.md), [docs/failure-modes.md](docs/failure-modes.md), and [docs/roadmap.md](docs/roadmap.md) for more detail.
+See [docs/tradeoffs.md](docs/tradeoffs.md), [docs/failure-modes.md](docs/failure-modes.md), [docs/operational-cost-and-ownership.md](docs/operational-cost-and-ownership.md), and [docs/roadmap.md](docs/roadmap.md) for more detail.
 
 ## Public-Safe Data
 
