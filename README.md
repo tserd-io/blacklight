@@ -123,6 +123,14 @@ Response:
 
 Structured API errors include `category`, `message`, `likely_cause`, and `next_step` for provider, configuration, validation, and idempotency failures.
 
+After requests have written traces, inspect session history in the app:
+
+```text
+http://127.0.0.1:8000/sessions/demo
+```
+
+The session page shows a timeline of workflow runs with provider, model, status, estimated cost, review outcome, and failure reason. Use the `accepted`, `needs_review`, `rejected`, and `failed` filters to review the same trace/session model exposed by `llm-platform session show`.
+
 ## Docker Example
 
 Build the API image:
