@@ -1,5 +1,12 @@
 {
   "prompt_id": "ticket_classifier",
+  "display_name": "Support Ticket Classifier",
+  "domain": "customer_support",
+  "task_type": "classification",
+  "output_schema": "TicketClassification",
+  "eval_fixture": "ticket_classification.jsonl",
+  "comparison_group": "support_ticket_classification",
+  "tags": ["support", "routing", "triage", "synthetic"],
   "versions": [
     {
       "version": 1,
@@ -7,6 +14,13 @@
       "notes": "Initial deterministic JSON classification prompt for synthetic support tickets.",
       "input_variables": ["subject", "body"],
       "template": "Classify this synthetic support ticket. Return only JSON with category, severity, confidence, rationale, and needs_review. Subject: $subject\nBody: $body"
+    },
+    {
+      "version": 2,
+      "active": false,
+      "notes": "Adds clearer routing guidance while preserving the TicketClassification output schema.",
+      "input_variables": ["subject", "body"],
+      "template": "Classify this synthetic customer-support ticket for routing. Return only JSON using the TicketClassification schema fields: category, severity, confidence, rationale, and needs_review. Use the ticket details as the source of truth and set needs_review when the text includes private or risky account information. Subject: $subject\nBody: $body"
     }
   ]
 }

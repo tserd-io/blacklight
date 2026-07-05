@@ -16,11 +16,19 @@ Logical connection paths:
 - `eval_runs.eval_run_id` -> `traces.eval_run_id` for all traces emitted by an eval run.
 - `prompt_id`, `prompt_version`, `provider`, and `model` for comparing eval metrics to matching trace slices.
 
+Prompt-version comparisons are scoped by prompt registry metadata. A prompt version can be compared with another version only when they share the same `comparison_group`, `output_schema`, and `eval_fixture`. This keeps regression reports tied to prompts that perform the same task and produce the same shape of output instead of comparing unrelated prompt families.
+
+Use:
+
+```bash
+llm-platform eval compare --baseline-version 1 --candidate-version 2
+```
+
+The report includes summary deltas for accuracy, schema validity, review rate, latency, estimated cost, and token use, plus per-case before/after fields and deltas.
+
 Future versions can add:
 
-- prompt-version comparisons
 - provider/model comparisons
 - richer review-reason categories
-- baseline comparisons across prompt versions
 - rubric scoring for summarization or extraction tasks
 - human review sampling

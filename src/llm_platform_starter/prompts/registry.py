@@ -13,6 +13,13 @@ class PromptTemplate:
     version: int
     template: str
     input_variables: list[str]
+    display_name: str = ""
+    domain: str = ""
+    task_type: str = ""
+    output_schema: str = ""
+    eval_fixture: str = ""
+    comparison_group: str = ""
+    tags: list[str] | None = None
     notes: str = ""
     active: bool = True
 
@@ -32,7 +39,8 @@ class PromptRegistry:
         return [self.get(prompt_id) for prompt_id in prompt_ids]
 
     def get(self, prompt_id: str, version: int | None = None) -> PromptTemplate:
-        templates = self._load_prompt_file(prompt_id)
+        prompt_file = self._load_prompt_file(prompt_id)
+        templates = prompt_file["versions"]
         if version is None:
             candidates = [item for item in templates if item.get("active", True)]
             if not candidates:
@@ -48,11 +56,18 @@ class PromptRegistry:
             version=item["version"],
             template=item["template"],
             input_variables=item["input_variables"],
+            display_name=prompt_file.get("display_name", ""),
+            domain=prompt_file.get("domain", ""),
+            task_type=prompt_file.get("task_type", ""),
+            output_schema=prompt_file.get("output_schema", ""),
+            eval_fixture=prompt_file.get("eval_fixture", ""),
+            comparison_group=prompt_file.get("comparison_group", ""),
+            tags=prompt_file.get("tags", []),
             notes=item.get("notes", ""),
             active=item.get("active", True),
         )
 
-    def _load_prompt_file(self, prompt_id: str) -> list[dict]:
+    def _load_prompt_file(self, prompt_id: str) -> dict:
         filename = f"{prompt_id}.json"
         if self.template_dir:
             raw = (self.template_dir / filename).read_text(encoding="utf-8")
@@ -61,7 +76,7 @@ class PromptRegistry:
                 filename
             ).read_text(encoding="utf-8")
         payload = json.loads(raw)
-        return payload["versions"]
+        return payload
 
     def _list_prompt_ids(self) -> list[str]:
         if self.template_dir:

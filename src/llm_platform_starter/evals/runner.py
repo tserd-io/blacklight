@@ -14,7 +14,7 @@ from llm_platform_starter.models import GuardrailOutcome, ProviderRequest, Trace
 from llm_platform_starter.observability.cost import estimate_cost
 from llm_platform_starter.observability.evaluations import EvalMetricStore
 from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.prompts.registry import PromptRegistry
+from llm_platform_starter.prompts.registry import PromptRegistry, PromptTemplate
 from llm_platform_starter.providers.base import LLMProvider
 from llm_platform_starter.providers.mock import MockProvider
 from llm_platform_starter.providers.reliability import ProviderCallError, complete_with_retries
@@ -33,7 +33,9 @@ def run_ticket_classification_eval(
     model: str = "mock-ticket-classifier",
     session_id: str = "eval",
     eval_run_id: str | None = None,
-    fixture_name: str = "ticket_classification.jsonl",
+    prompt_id: str = "ticket_classifier",
+    prompt_version: int | None = None,
+    fixture_name: str | None = None,
     eval_store: EvalMetricStore | None = None,
     trace_store: TraceStore | None = None,
     timeout_seconds: float = 30.0,
@@ -42,7 +44,8 @@ def run_ticket_classification_eval(
 ) -> dict:
     provider = provider or MockProvider()
     eval_run_id = eval_run_id or str(uuid.uuid4())
-    prompt_template = PromptRegistry().get("ticket_classifier")
+    prompt_template = PromptRegistry().get(prompt_id, version=prompt_version)
+    fixture_name = fixture_name or prompt_template.eval_fixture or "ticket_classification.jsonl"
     rows = load_fixture(fixture_name)
     checks: list[bool] = []
     cases = []
@@ -164,6 +167,197 @@ def run_ticket_classification_eval(
     if eval_store:
         eval_store.insert_report(report)
     return report
+
+
+def compare_ticket_classification_prompt_versions(
+    *,
+    baseline_version: int,
+    candidate_version: int,
+    provider_factory: Callable[[], LLMProvider] = MockProvider,
+    model: str = "mock-ticket-classifier",
+    session_id: str = "eval-compare",
+    prompt_id: str = "ticket_classifier",
+    fixture_name: str | None = None,
+    timeout_seconds: float = 30.0,
+    max_retries: int = 2,
+    monotonic: Callable[[], float] | None = None,
+) -> dict:
+    monotonic = monotonic or _deterministic_monotonic()
+    registry = PromptRegistry()
+    baseline_prompt = registry.get(prompt_id, version=baseline_version)
+    candidate_prompt = registry.get(prompt_id, version=candidate_version)
+    _validate_comparable_prompts(baseline_prompt, candidate_prompt)
+
+    baseline_report = run_ticket_classification_eval(
+        provider=provider_factory(),
+        model=model,
+        session_id=session_id,
+        eval_run_id=f"{session_id}:prompt-{baseline_version}",
+        prompt_id=prompt_id,
+        prompt_version=baseline_version,
+        fixture_name=fixture_name,
+        timeout_seconds=timeout_seconds,
+        max_retries=max_retries,
+        monotonic=monotonic,
+    )
+    candidate_report = run_ticket_classification_eval(
+        provider=provider_factory(),
+        model=model,
+        session_id=session_id,
+        eval_run_id=f"{session_id}:prompt-{candidate_version}",
+        prompt_id=prompt_id,
+        prompt_version=candidate_version,
+        fixture_name=fixture_name,
+        timeout_seconds=timeout_seconds,
+        max_retries=max_retries,
+        monotonic=monotonic,
+    )
+
+    return {
+        "prompt_id": prompt_id,
+        "comparison_group": baseline_prompt.comparison_group,
+        "output_schema": baseline_prompt.output_schema,
+        "fixture_name": baseline_report["fixture_name"],
+        "baseline": _prompt_report_summary(baseline_report),
+        "candidate": _prompt_report_summary(candidate_report),
+        "summary_deltas": _summary_deltas(
+            baseline_report["summary"],
+            candidate_report["summary"],
+        ),
+        "case_changes": _case_changes(
+            baseline_report["cases"],
+            candidate_report["cases"],
+        ),
+    }
+
+
+def _validate_comparable_prompts(
+    baseline_prompt: PromptTemplate,
+    candidate_prompt: PromptTemplate,
+) -> None:
+    required_matches = {
+        "comparison_group": (
+            baseline_prompt.comparison_group,
+            candidate_prompt.comparison_group,
+        ),
+        "output_schema": (
+            baseline_prompt.output_schema,
+            candidate_prompt.output_schema,
+        ),
+        "eval_fixture": (
+            baseline_prompt.eval_fixture,
+            candidate_prompt.eval_fixture,
+        ),
+    }
+    mismatches = [
+        field
+        for field, (baseline, candidate) in required_matches.items()
+        if baseline != candidate
+    ]
+    if mismatches:
+        raise ValueError(
+            "Prompt versions are not comparable because these fields differ: "
+            + ", ".join(mismatches)
+        )
+
+
+def _prompt_report_summary(report: dict) -> dict:
+    return {
+        "eval_run_id": report["eval_run_id"],
+        "prompt_version": report["prompt_version"],
+        "provider": report["provider"],
+        "model": report["model"],
+        "summary": report["summary"],
+    }
+
+
+def _summary_deltas(baseline_summary: dict, candidate_summary: dict) -> dict:
+    metrics = [
+        "accuracy",
+        "schema_validity_rate",
+        "needs_review_rate",
+        "average_latency_ms",
+        "latency_p50_ms",
+        "latency_p95_ms",
+        "total_estimated_cost_usd",
+        "tokens_per_case",
+    ]
+    return {
+        metric: {
+            "baseline": baseline_summary[metric],
+            "candidate": candidate_summary[metric],
+            "delta": round(candidate_summary[metric] - baseline_summary[metric], 8),
+        }
+        for metric in metrics
+    }
+
+
+def _case_changes(baseline_cases: list[dict], candidate_cases: list[dict]) -> list[dict]:
+    candidate_by_id = {case["id"]: case for case in candidate_cases}
+    changes = []
+    for baseline_case in baseline_cases:
+        candidate_case = candidate_by_id[baseline_case["id"]]
+        changed_fields = [
+            field
+            for field in [
+                "actual_category",
+                "passed",
+                "schema_valid",
+                "needs_review",
+                "confidence",
+                "error_category",
+            ]
+            if baseline_case[field] != candidate_case[field]
+        ]
+        changes.append(
+            {
+                "id": baseline_case["id"],
+                "expected_category": baseline_case["expected_category"],
+                "changed": bool(changed_fields),
+                "changed_fields": changed_fields,
+                "baseline": _case_comparison_slice(baseline_case),
+                "candidate": _case_comparison_slice(candidate_case),
+                "deltas": {
+                    "latency_ms": round(
+                        candidate_case["latency_ms"] - baseline_case["latency_ms"],
+                        4,
+                    ),
+                    "total_tokens": candidate_case["total_tokens"] - baseline_case["total_tokens"],
+                    "estimated_cost_usd": round(
+                        candidate_case["estimated_cost_usd"]
+                        - baseline_case["estimated_cost_usd"],
+                        8,
+                    ),
+                },
+            }
+        )
+    return changes
+
+
+def _case_comparison_slice(case: dict) -> dict:
+    return {
+        "actual_category": case["actual_category"],
+        "passed": case["passed"],
+        "schema_valid": case["schema_valid"],
+        "needs_review": case["needs_review"],
+        "confidence": case["confidence"],
+        "latency_ms": case["latency_ms"],
+        "total_tokens": case["total_tokens"],
+        "estimated_cost_usd": case["estimated_cost_usd"],
+        "error_category": case["error_category"],
+    }
+
+
+def _deterministic_monotonic(step_seconds: float = 0.001) -> Callable[[], float]:
+    current = 0.0
+
+    def monotonic() -> float:
+        nonlocal current
+        value = current
+        current += step_seconds
+        return value
+
+    return monotonic
 
 
 def _build_summary(cases: list[dict], checks: list[bool]) -> dict:
