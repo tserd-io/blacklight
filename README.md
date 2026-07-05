@@ -228,6 +228,14 @@ Show one trace:
 llm-platform trace show <trace_id> --trace-db-path traces.sqlite3
 ```
 
+Inspect all traces for one session in chronological order:
+
+```bash
+llm-platform session show demo --trace-db-path traces.sqlite3
+```
+
+Session history is for operational review: it shows what happened during a user, workflow, or CI session, including per-request traces and aggregate totals for tokens, estimated cost, failures, review routing, and provider/model usage. Prompt comparison is for eval regression: it compares two compatible prompt versions against the same fixture and schema.
+
 Print aggregate metrics:
 
 ```bash

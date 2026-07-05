@@ -39,6 +39,15 @@ def trace_not_found_error(trace_id: str) -> ErrorDetail:
     )
 
 
+def session_not_found_error(session_id: str) -> ErrorDetail:
+    return ErrorDetail(
+        category="session_not_found",
+        message=f"Session not found: {session_id}",
+        likely_cause="No trace records exist for that session id in the selected SQLite database.",
+        next_step="Run `llm-platform trace list` with the same --trace-db-path and retry with a listed session_id.",
+    )
+
+
 def describe_exception(exc: Exception) -> ErrorDetail:
     if isinstance(exc, ProviderConfigurationError):
         return ErrorDetail(

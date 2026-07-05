@@ -3,7 +3,9 @@ import json
 import pytest
 
 from llm_platform_starter.cli import main
+from llm_platform_starter.models import GuardrailOutcome, TraceRecord
 from llm_platform_starter.observability.evaluations import EvalMetricStore
+from llm_platform_starter.observability.storage import TraceStore
 
 
 def test_classify_command_prints_ticket_json(capsys, tmp_path):
@@ -268,6 +270,128 @@ def test_trace_show_missing_record_returns_clear_error(capsys, tmp_path):
     assert captured.out == ""
     assert payload["error"]["category"] == "trace_not_found"
     assert payload["error"]["message"] == "Trace not found: missing-request"
+    assert "trace list" in payload["error"]["next_step"]
+
+
+def test_session_show_prints_chronological_trace_history_and_summary(capsys, tmp_path):
+    trace_db_path = tmp_path / "traces.sqlite3"
+    store = TraceStore(trace_db_path)
+    store.insert(
+        TraceRecord(
+            request_id="request-1",
+            session_id="session-a",
+            prompt_id="ticket_classifier",
+            prompt_version=1,
+            provider="mock",
+            model="mock-ticket-classifier",
+            latency_ms=10,
+            input_tokens=10,
+            output_tokens=5,
+            estimated_cost_usd=0.0,
+            validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.accepted,
+        )
+    )
+    store.insert(
+        TraceRecord(
+            request_id="request-other",
+            session_id="session-b",
+            prompt_id="ticket_classifier",
+            prompt_version=1,
+            provider="mock",
+            model="mock-ticket-classifier",
+            latency_ms=10,
+            input_tokens=10,
+            output_tokens=5,
+            estimated_cost_usd=0.0,
+            validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.accepted,
+        )
+    )
+    store.insert(
+        TraceRecord(
+            request_id="request-2",
+            session_id="session-a",
+            prompt_id="ticket_classifier",
+            prompt_version=2,
+            provider="openai",
+            model="gpt-4.1-mini",
+            latency_ms=25,
+            input_tokens=20,
+            output_tokens=7,
+            estimated_cost_usd=0.00003,
+            validation_passed=False,
+            guardrail_outcome=GuardrailOutcome.needs_review,
+            error_category="provider_timeout",
+        )
+    )
+
+    exit_code = main(
+        [
+            "session",
+            "show",
+            "session-a",
+            "--trace-db-path",
+            str(trace_db_path),
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["session_id"] == "session-a"
+    assert [trace["request_id"] for trace in payload["traces"]] == ["request-1", "request-2"]
+    assert payload["summary"]["request_count"] == 2
+    assert payload["summary"]["total_input_tokens"] == 30
+    assert payload["summary"]["total_output_tokens"] == 12
+    assert payload["summary"]["total_tokens"] == 42
+    assert payload["summary"]["total_estimated_cost_usd"] == 0.00003
+    assert payload["summary"]["failure_count"] == 1
+    assert payload["summary"]["failure_rate"] == 0.5
+    assert payload["summary"]["review_count"] == 1
+    assert payload["summary"]["validation_failure_count"] == 1
+    assert payload["summary"]["by_provider_model"] == [
+        {
+            "provider": "mock",
+            "model": "mock-ticket-classifier",
+            "request_count": 1,
+            "total_tokens": 15,
+            "total_estimated_cost_usd": 0.0,
+            "failure_count": 0,
+            "review_count": 0,
+            "failure_rate": 0.0,
+        },
+        {
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "request_count": 1,
+            "total_tokens": 27,
+            "total_estimated_cost_usd": 0.00003,
+            "failure_count": 1,
+            "review_count": 1,
+            "failure_rate": 1.0,
+        },
+    ]
+
+
+def test_session_show_missing_session_returns_clear_error(capsys, tmp_path):
+    trace_db_path = tmp_path / "traces.sqlite3"
+
+    exit_code = main(
+        [
+            "session",
+            "show",
+            "missing-session",
+            "--trace-db-path",
+            str(trace_db_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.err)
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert payload["error"]["category"] == "session_not_found"
+    assert payload["error"]["message"] == "Session not found: missing-session"
     assert "trace list" in payload["error"]["next_step"]
 
 

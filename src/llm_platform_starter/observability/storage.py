@@ -147,7 +147,7 @@ class TraceStore:
                   guardrail_outcome, error_category
                 FROM traces
                 WHERE session_id = ?
-                ORDER BY id DESC
+                ORDER BY id ASC
                 LIMIT ?
                 """,
                 (session_id, limit),

@@ -6,7 +6,12 @@ import os
 import sys
 from typing import Any
 
-from llm_platform_starter.errors import describe_exception, is_known_error, trace_not_found_error
+from llm_platform_starter.errors import (
+    describe_exception,
+    is_known_error,
+    session_not_found_error,
+    trace_not_found_error,
+)
 from llm_platform_starter.evals.runner import (
     compare_ticket_classification_prompt_versions,
     run_ticket_classification_eval,
@@ -47,6 +52,63 @@ def _trace_detail(trace: dict[str, Any]) -> dict[str, Any]:
         "error_category": trace["error_category"],
         "created_at": trace["created_at"],
     }
+
+
+def _summarize_session(traces: list[dict[str, Any]]) -> dict[str, Any]:
+    request_count = len(traces)
+    total_input_tokens = sum(trace["input_tokens"] for trace in traces)
+    total_output_tokens = sum(trace["output_tokens"] for trace in traces)
+    failure_count = sum(1 for trace in traces if trace["error_category"] is not None)
+    review_count = sum(1 for trace in traces if trace["guardrail_outcome"] == "needs_review")
+    validation_failure_count = sum(1 for trace in traces if not trace["validation_passed"])
+
+    return {
+        "request_count": request_count,
+        "total_input_tokens": total_input_tokens,
+        "total_output_tokens": total_output_tokens,
+        "total_tokens": total_input_tokens + total_output_tokens,
+        "total_estimated_cost_usd": round(
+            sum(trace["estimated_cost_usd"] for trace in traces),
+            8,
+        ),
+        "failure_count": failure_count,
+        "failure_rate": round(failure_count / request_count, 4) if request_count else 0.0,
+        "review_count": review_count,
+        "validation_failure_count": validation_failure_count,
+        "by_provider_model": _group_session_traces(traces, ["provider", "model"]),
+    }
+
+
+def _group_session_traces(traces: list[dict[str, Any]], keys: list[str]) -> list[dict[str, Any]]:
+    groups: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for trace in traces:
+        group_key = tuple(trace[key] for key in keys)
+        group = groups.setdefault(
+            group_key,
+            {
+                **{key: trace[key] for key in keys},
+                "request_count": 0,
+                "total_tokens": 0,
+                "total_estimated_cost_usd": 0.0,
+                "failure_count": 0,
+                "review_count": 0,
+            },
+        )
+        group["request_count"] += 1
+        group["total_tokens"] += trace["input_tokens"] + trace["output_tokens"]
+        group["total_estimated_cost_usd"] += trace["estimated_cost_usd"]
+        if trace["error_category"] is not None:
+            group["failure_count"] += 1
+        if trace["guardrail_outcome"] == "needs_review":
+            group["review_count"] += 1
+
+    grouped = []
+    for group in groups.values():
+        request_count = group["request_count"]
+        group["total_estimated_cost_usd"] = round(group["total_estimated_cost_usd"], 8)
+        group["failure_rate"] = round(group["failure_count"] / request_count, 4)
+        grouped.append(group)
+    return sorted(grouped, key=lambda group: (-group["request_count"], group["provider"], group["model"]))
 
 
 def classify(args: argparse.Namespace) -> int:
@@ -215,6 +277,24 @@ def trace_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def session_show(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    trace_store = TraceStore(args.trace_db_path or settings.trace_db_path)
+    traces = trace_store.list_by_session_id(args.session_id, limit=args.limit)
+    if not traces:
+        _print_error(session_not_found_error(args.session_id).as_payload())
+        return 1
+    trace_details = [_trace_detail(trace) for trace in traces]
+    _print_json(
+        {
+            "session_id": args.session_id,
+            "summary": _summarize_session(trace_details),
+            "traces": trace_details,
+        }
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="llm-platform",
@@ -368,6 +448,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_trace_commands("trace")
     add_trace_commands("traces")
+
+    session_parser = subparsers.add_parser("session", help="Inspect session trace history.")
+    session_subparsers = session_parser.add_subparsers(dest="session_command", required=True)
+    session_show_parser = session_subparsers.add_parser(
+        "show",
+        help="Show chronological trace history and aggregate metrics for a session.",
+    )
+    session_show_parser.add_argument("session_id", help="Session id to inspect.")
+    session_show_parser.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Maximum session traces to return.",
+    )
+    session_show_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    session_show_parser.set_defaults(func=session_show)
 
     return parser
 
