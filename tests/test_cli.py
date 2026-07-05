@@ -28,6 +28,46 @@ def test_classify_command_prints_ticket_json(capsys, tmp_path):
     assert payload["severity"] == "medium"
 
 
+def test_demo_command_runs_mock_workflow_and_prints_next_steps(capsys, tmp_path):
+    trace_db_path = tmp_path / "traces.sqlite3"
+
+    exit_code = main(["demo", "--verbose", "--trace-db-path", str(trace_db_path)])
+    payload = json.loads(capsys.readouterr().out)
+    traces = TraceStore(trace_db_path).list_by_session_id("demo")
+
+    assert exit_code == 0
+    assert payload["demo"] == "ticket_classifier"
+    assert payload["message"] == "Mock-mode demo completed without live provider credentials."
+    assert payload["sample_input"]["subject"] == "Refund request"
+    assert payload["result"]["category"] == "billing"
+    assert payload["result"]["severity"] == "medium"
+    assert payload["trace"]["request_id"] == traces[0]["request_id"]
+    assert payload["trace"]["trace_db_path"] == str(trace_db_path)
+    assert "llm-platform trace show" in payload["trace"]["inspect_command"]
+    assert "llm-platform session show demo" in payload["trace"]["session_command"]
+    assert "llm-platform classify" in payload["next_commands"]["equivalent_workflow_command"]
+    assert "--subject" in payload["next_commands"]["equivalent_workflow_command"]
+    assert "llm-platform eval run" in payload["next_commands"]["eval_command"]
+    assert payload["runtime"]["provider"] == "mock"
+    assert payload["runtime"]["live_credentials_required"] is False
+    assert payload["trace"]["record"]["provider"] == "mock"
+
+
+def test_demo_command_ignores_live_provider_environment(capsys, monkeypatch, tmp_path):
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    trace_db_path = tmp_path / "traces.sqlite3"
+
+    exit_code = main(["demo", "--trace-db-path", str(trace_db_path)])
+    payload = json.loads(capsys.readouterr().out)
+    traces = TraceStore(trace_db_path).list_by_session_id("demo")
+
+    assert exit_code == 0
+    assert payload["result"]["category"] == "billing"
+    assert traces[0]["provider"] == "mock"
+    assert traces[0]["model"] == "mock-ticket-classifier"
+
+
 def test_eval_command_prints_summary(capsys, tmp_path):
     trace_db_path = tmp_path / "traces.sqlite3"
     exit_code = main(

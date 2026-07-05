@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import uuid
 from typing import Any
 
 from llm_platform_starter.errors import (
@@ -23,7 +24,13 @@ from llm_platform_starter.observability.idempotency import IdempotencyStore
 from llm_platform_starter.observability.storage import TraceStore
 from llm_platform_starter.prompts.registry import PromptRegistry
 from llm_platform_starter.providers.factory import create_provider
+from llm_platform_starter.providers.mock import MockProvider
 from llm_platform_starter.settings import load_settings
+
+DEMO_SUBJECT = "Refund request"
+DEMO_BODY = "Customer asks for a refund after duplicate billing."
+DEMO_SESSION_ID = "demo"
+DEMO_MODEL = "mock-ticket-classifier"
 
 
 def _print_json(payload: dict[str, Any]) -> None:
@@ -32,6 +39,14 @@ def _print_json(payload: dict[str, Any]) -> None:
 
 def _print_error(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, indent=2), file=sys.stderr)
+
+
+def _quote_command_arg(value: str) -> str:
+    return json.dumps(value)
+
+
+def _command_string(parts: list[str]) -> str:
+    return " ".join(_quote_command_arg(part) if " " in part else part for part in parts)
 
 
 def _trace_detail(trace: dict[str, Any]) -> dict[str, Any]:
@@ -109,6 +124,111 @@ def _group_session_traces(traces: list[dict[str, Any]], keys: list[str]) -> list
         group["failure_rate"] = round(group["failure_count"] / request_count, 4)
         grouped.append(group)
     return sorted(grouped, key=lambda group: (-group["request_count"], group["provider"], group["model"]))
+
+
+def demo(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    db_path = args.trace_db_path or settings.trace_db_path
+    session_id = args.session_id
+    trace_store = TraceStore(db_path)
+    idempotency_store = IdempotencyStore(db_path)
+    classifier = TicketClassifier(
+        provider=MockProvider(),
+        model=DEMO_MODEL,
+        trace_store=trace_store,
+        idempotency_store=idempotency_store,
+        provider_timeout_seconds=settings.provider_timeout_seconds,
+        provider_max_retries=settings.provider_max_retries,
+        provider_rate_limit_requests=settings.provider_rate_limit_requests,
+        provider_rate_limit_window_seconds=settings.provider_rate_limit_window_seconds,
+    )
+    result = classifier.classify(
+        TicketRequest(
+            subject=DEMO_SUBJECT,
+            body=DEMO_BODY,
+            session_id=session_id,
+            idempotency_key=f"demo-{uuid.uuid4()}",
+        )
+    )
+    traces = trace_store.list_by_session_id(session_id, limit=500)
+    trace = traces[-1]
+    trace_detail = _trace_detail(trace)
+    trace_command = _command_string(
+        [
+            "llm-platform",
+            "trace",
+            "show",
+            trace["request_id"],
+            "--trace-db-path",
+            db_path,
+        ]
+    )
+    session_command = _command_string(
+        [
+            "llm-platform",
+            "session",
+            "show",
+            session_id,
+            "--trace-db-path",
+            db_path,
+        ]
+    )
+    eval_command = _command_string(
+        [
+            "llm-platform",
+            "eval",
+            "run",
+            "--trace-db-path",
+            db_path,
+            "--session-id",
+            f"{session_id}-eval",
+        ]
+    )
+    equivalent_workflow_command = _command_string(
+        [
+            "llm-platform",
+            "classify",
+            "--subject",
+            DEMO_SUBJECT,
+            "--body",
+            DEMO_BODY,
+            "--trace-db-path",
+            db_path,
+            "--session-id",
+            session_id,
+        ]
+    )
+
+    payload: dict[str, Any] = {
+        "demo": "ticket_classifier",
+        "message": "Mock-mode demo completed without live provider credentials.",
+        "sample_input": {
+            "subject": DEMO_SUBJECT,
+            "body": DEMO_BODY,
+            "session_id": session_id,
+        },
+        "result": result.model_dump(mode="json"),
+        "trace": {
+            "request_id": trace["request_id"],
+            "session_id": session_id,
+            "trace_db_path": db_path,
+            "inspect_command": trace_command,
+            "session_command": session_command,
+        },
+        "next_commands": {
+            "equivalent_workflow_command": equivalent_workflow_command,
+            "eval_command": eval_command,
+        },
+    }
+    if args.verbose:
+        payload["runtime"] = {
+            "provider": "mock",
+            "model": DEMO_MODEL,
+            "live_credentials_required": False,
+        }
+        payload["trace"]["record"] = trace_detail
+    _print_json(payload)
+    return 0
 
 
 def classify(args: argparse.Namespace) -> int:
@@ -301,6 +421,27 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run the LLM platform starter demo workflows.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    demo_parser = subparsers.add_parser(
+        "demo",
+        help="Run a guided mock-mode ticket-classifier demo.",
+    )
+    demo_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Include runtime details and the full trace record.",
+    )
+    demo_parser.add_argument(
+        "--session-id",
+        default=DEMO_SESSION_ID,
+        help="Session id used for the demo trace.",
+    )
+    demo_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    demo_parser.set_defaults(func=demo)
 
     classify_parser = subparsers.add_parser("classify", help="Classify a support ticket.")
     classify_parser.add_argument("--subject", required=True, help="Support ticket subject.")
