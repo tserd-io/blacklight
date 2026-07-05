@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import uuid
+import json
 import os
+import uuid
 from html import escape
 from typing import Any
 from urllib.parse import parse_qs
@@ -83,8 +84,12 @@ class ConsoleSettingsUpdateRequest(BaseModel):
 
 
 def _build_classifier() -> TicketClassifier:
+    try:
+        provider = create_provider(settings)
+    except RuntimeError as exc:
+        raise ProviderConfigurationError(str(exc)) from exc
     return TicketClassifier(
-        provider=create_provider(settings),
+        provider=provider,
         model=settings.model,
         trace_store=trace_store,
         idempotency_store=idempotency_store,
@@ -283,7 +288,22 @@ def _console_command_panel(command: str) -> str:
 
 
 def _trace_db_arg() -> str:
-    return f"--trace-db-path {settings.trace_db_path}"
+    return f"--trace-db-path {_quote_cli_arg(settings.trace_db_path)}"
+
+
+def _quote_cli_arg(value: str) -> str:
+    if not value or any(char.isspace() for char in value) or '"' in value:
+        return json.dumps(value)
+    return value
+
+
+def _cli_affordance(primary: str, **commands: str) -> dict[str, Any]:
+    named_commands = {"primary": primary, **commands}
+    return {
+        "cli_command": primary,
+        "cli_commands": named_commands,
+        "cli": named_commands,
+    }
 
 
 def _prompt_payload(prompt_id: str, version: int | None = None) -> dict[str, Any]:
@@ -292,7 +312,7 @@ def _prompt_payload(prompt_id: str, version: int | None = None) -> dict[str, Any
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     version_arg = f" --version {prompt.version}" if version is not None else ""
-    return {
+    payload = {
         "prompt_id": prompt.prompt_id,
         "display_name": prompt.display_name,
         "version": prompt.version,
@@ -306,11 +326,16 @@ def _prompt_payload(prompt_id: str, version: int | None = None) -> dict[str, Any
         "input_variables": prompt.input_variables,
         "notes": prompt.notes,
         "template": prompt.template,
-        "cli": {
-            "show": f"llm-platform prompts show {prompt.prompt_id}{version_arg}",
-            "list": "llm-platform prompts list",
-        },
     }
+    payload.update(
+        _cli_affordance(
+            f"llm-platform prompts show {prompt.prompt_id}{version_arg}",
+            show=f"llm-platform prompts show {prompt.prompt_id}{version_arg}",
+            list="llm-platform prompts list",
+            compare="llm-platform eval compare --baseline-version 1 --candidate-version 2",
+        )
+    )
+    return payload
 
 
 def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
@@ -321,21 +346,25 @@ def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
             "session_api": f"/api/sessions/{trace['session_id']}",
             "session_ui": f"/sessions/{trace['session_id']}",
         },
-        "cli": {
-            "show": f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
-            "session": f"llm-platform session show {trace['session_id']} {_trace_db_arg()}",
-            "list": f"llm-platform trace list {_trace_db_arg()} --limit 10",
-        },
     }
+    payload.update(
+        _cli_affordance(
+            f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
+            show=f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
+            session=f"llm-platform session show {trace['session_id']} {_trace_db_arg()}",
+            list=f"llm-platform trace list {_trace_db_arg()} --limit 10",
+        )
+    )
     if detail["reviewable"]:
         payload["links"]["review_ui"] = (
             f"/sessions/{trace['session_id']}/review/{trace['request_id']}"
         )
     if trace["eval_run_id"]:
         payload["links"]["eval_api"] = f"/api/console/evals/{trace['eval_run_id']}"
-        payload["cli"]["eval"] = (
+        payload["cli_commands"]["eval"] = (
             f"llm-platform eval show {trace['eval_run_id']} {_trace_db_arg()}"
         )
+        payload["cli"]["eval"] = payload["cli_commands"]["eval"]
     return payload
 
 
@@ -362,9 +391,12 @@ def _session_run_summaries(limit: int = 50) -> list[dict[str, Any]]:
     runs = []
     for session in sessions.values():
         session["total_estimated_cost_usd"] = round(session["total_estimated_cost_usd"], 8)
-        session["cli"] = {
-            "show": f"llm-platform session show {session['session_id']} {_trace_db_arg()}",
-        }
+        session.update(
+            _cli_affordance(
+                f"llm-platform session show {session['session_id']} {_trace_db_arg()}",
+                show=f"llm-platform session show {session['session_id']} {_trace_db_arg()}",
+            )
+        )
         session["links"] = {
             "api": f"/api/console/runs/{session['session_id']}",
             "ui": f"/sessions/{session['session_id']}",
@@ -376,7 +408,7 @@ def _session_run_summaries(limit: int = 50) -> list[dict[str, Any]]:
 def _workflow_payload(workflow_id: str = "ticket_classifier") -> dict[str, Any]:
     if workflow_id != "ticket_classifier":
         raise HTTPException(status_code=404, detail=f"Workflow not found: {workflow_id}")
-    return {
+    payload = {
         "workflow_id": workflow_id,
         "display_name": "Ticket Classifier",
         "description": "Classifies support-style work items with validation, tracing, and review routing.",
@@ -388,35 +420,45 @@ def _workflow_payload(workflow_id: str = "ticket_classifier") -> dict[str, Any]:
             "body": "Customer asks for a refund after duplicate billing.",
             "session_id": "console-api-demo",
         },
-        "cli": {
-            "run": (
-                'llm-platform classify --subject "Refund request" '
-                '--body "Customer asks for a refund after duplicate billing." '
-                f"--session-id console-api-demo {_trace_db_arg()}"
-            ),
-            "demo": f"llm-platform demo --verbose {_trace_db_arg()}",
-        },
         "links": {
             "run": f"/api/console/workflows/{workflow_id}/run",
             "traces": "/api/console/traces",
         },
     }
+    run_command = (
+        f"llm-platform classify --subject {_quote_cli_arg('Refund request')} "
+        f"--body {_quote_cli_arg('Customer asks for a refund after duplicate billing.')} "
+        f"--session-id console-api-demo {_trace_db_arg()}"
+    )
+    payload.update(
+        _cli_affordance(
+            run_command,
+            run=run_command,
+            demo=f"llm-platform demo --verbose {_trace_db_arg()}",
+        )
+    )
+    return payload
 
 
 def _eval_run_payload(run: dict[str, Any]) -> dict[str, Any]:
     eval_run_id = run["eval_run_id"]
-    return {
+    payload = {
         **run,
         "links": {
             "api": f"/api/console/evals/{eval_run_id}",
             "session_api": f"/api/console/runs/{run['session_id']}",
             "session_ui": f"/sessions/{run['session_id']}",
         },
-        "cli": {
-            "show": f"llm-platform eval show {eval_run_id} {_trace_db_arg()}",
-            "list": f"llm-platform eval list {_trace_db_arg()}",
-        },
     }
+    payload.update(
+        _cli_affordance(
+            f"llm-platform eval show {eval_run_id} {_trace_db_arg()}",
+            show=f"llm-platform eval show {eval_run_id} {_trace_db_arg()}",
+            list=f"llm-platform eval list {_trace_db_arg()}",
+            run=f"llm-platform eval run {_trace_db_arg()} --session-id {run['session_id']}",
+        )
+    )
+    return payload
 
 
 def _provider_payload(provider: str) -> dict[str, Any]:
@@ -428,7 +470,7 @@ def _provider_payload(provider: str) -> dict[str, Any]:
         "openai": bool(settings.openai_api_key),
         "custom": bool(settings.custom_provider_path),
     }[provider]
-    return {
+    payload = {
         "provider": provider,
         "active": settings.provider == provider,
         "configured": configured,
@@ -440,11 +482,15 @@ def _provider_payload(provider: str) -> dict[str, Any]:
             "openai": "Set LLM_PROVIDER=openai and OPENAI_API_KEY.",
             "custom": "Set LLM_PROVIDER=custom and LLM_CUSTOM_PROVIDER to an import path.",
         }[provider],
-        "cli": {
-            "health": "llm-platform health",
-            "demo": f"llm-platform demo --verbose {_trace_db_arg()}",
-        },
     }
+    payload.update(
+        _cli_affordance(
+            "llm-platform health",
+            health="llm-platform health",
+            demo=f"llm-platform demo --verbose {_trace_db_arg()}",
+        )
+    )
+    return payload
 
 
 def _editable_settings_catalog() -> list[dict[str, Any]]:
@@ -525,7 +571,7 @@ def _reload_runtime_settings() -> None:
 
 def _settings_payload() -> dict[str, Any]:
     user_env = load_user_env()
-    return {
+    payload = {
         "provider": settings.provider,
         "model": settings.model,
         "trace_db_path": settings.trace_db_path,
@@ -540,13 +586,14 @@ def _settings_payload() -> dict[str, Any]:
         "restart_required": False,
         "user_env": _user_env_payload(user_env),
         "editable_settings": _editable_settings_catalog(),
-        "cli": {"health": "llm-platform health"},
     }
+    payload.update(_cli_affordance("llm-platform health", health="llm-platform health"))
+    return payload
 
 
 def _dashboard_payload(limit: int = 5) -> dict[str, Any]:
     review_payload = _review_queue_payload(limit=100, include_decided=False)
-    return {
+    payload = {
         "dashboard": "console",
         "metrics": trace_store.metrics(),
         "recent_traces": [_trace_payload(trace) for trace in trace_store.list_recent(limit=limit)],
@@ -568,12 +615,16 @@ def _dashboard_payload(limit: int = 5) -> dict[str, Any]:
             "reviews": "/api/console/reviews",
             "settings": "/api/console/settings",
         },
-        "cli": {
-            "guided_demo": f"llm-platform demo --verbose {_trace_db_arg()}",
-            "seed_demo_data": f"llm-platform seed demo-data {_trace_db_arg()}",
-            "health": "llm-platform health",
-        },
     }
+    payload.update(
+        _cli_affordance(
+            f"llm-platform demo --verbose {_trace_db_arg()}",
+            guided_demo=f"llm-platform demo --verbose {_trace_db_arg()}",
+            seed_demo_data=f"llm-platform seed demo-data {_trace_db_arg()}",
+            health="llm-platform health",
+        )
+    )
+    return payload
 
 
 def _render_console_dashboard() -> HTMLResponse:
@@ -1217,16 +1268,22 @@ def console_dashboard_json_alias(limit: int = Query(default=5, ge=1, le=50)) -> 
 
 @app.get("/api/console/workflows")
 def console_workflows_json() -> dict[str, Any]:
-    return {
+    payload = {
         "workflows": [_workflow_payload()],
-        "cli": {"list": "llm-platform demo --verbose"},
     }
+    payload.update(_cli_affordance("llm-platform demo --verbose", list="llm-platform demo --verbose"))
+    return payload
 
 
 @app.get("/api/console/workflows/{workflow_id}")
 def console_workflow_json(workflow_id: str) -> dict[str, Any]:
     workflow = _workflow_payload(workflow_id)
-    return {"workflow": workflow, "cli": workflow["cli"]}
+    return {
+        "workflow": workflow,
+        "cli_command": workflow["cli_command"],
+        "cli_commands": workflow["cli_commands"],
+        "cli": workflow["cli"],
+    }
 
 
 @app.post("/api/console/workflows/{workflow_id}/run")
@@ -1256,30 +1313,42 @@ def console_workflow_run_json(
     )
     traces = trace_store.list_by_session_id(run_request.session_id, limit=500)
     trace = traces[-1]
-    return {
+    equivalent_run = (
+        f"llm-platform classify --subject {_quote_cli_arg(run_request.subject)} "
+        f"--body {_quote_cli_arg(run_request.body)} "
+        f"--session-id {_quote_cli_arg(run_request.session_id)} "
+        f"{_trace_db_arg()}"
+    )
+    payload = {
         "workflow_id": workflow_id,
         "message": "Mock-mode workflow run completed without live provider credentials.",
         "input": run_request.model_dump(mode="json"),
         "result": result.model_dump(mode="json"),
         "trace": _trace_payload(trace),
-        "cli": {
-            "equivalent_run": (
-                f'llm-platform classify --subject "{run_request.subject}" '
-                f'--body "{run_request.body}" --session-id {run_request.session_id} '
-                f"{_trace_db_arg()}"
-            ),
-            "trace": f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
-            "session": f"llm-platform session show {run_request.session_id} {_trace_db_arg()}",
-        },
     }
+    payload.update(
+        _cli_affordance(
+            equivalent_run,
+            equivalent_run=equivalent_run,
+            trace=f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
+            session=f"llm-platform session show {run_request.session_id} {_trace_db_arg()}",
+        )
+    )
+    return payload
 
 
 @app.get("/api/console/runs")
 def console_runs_json(limit: int = Query(default=50, ge=1, le=500)) -> dict[str, Any]:
-    return {
+    payload = {
         "runs": _session_run_summaries(limit=limit),
-        "cli": {"show": f"llm-platform session show <session_id> {_trace_db_arg()}"},
     }
+    payload.update(
+        _cli_affordance(
+            f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+            list=f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+        )
+    )
+    return payload
 
 
 @app.get("/api/console/runs/{session_id}")
@@ -1289,22 +1358,32 @@ def console_run_json(
     limit: int = Query(default=50, ge=1, le=500),
 ) -> dict[str, Any]:
     payload = _session_history_payload(session_id=session_id, status=status, limit=limit)
-    return {
+    payload = {
         **payload,
-        "cli": {
-            "show": f"llm-platform session show {session_id} {_trace_db_arg()} --limit {limit}",
-            "traces": f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
-        },
         "links": {"ui": f"/sessions/{session_id}"},
     }
+    payload.update(
+        _cli_affordance(
+            f"llm-platform session show {session_id} {_trace_db_arg()} --limit {limit}",
+            show=f"llm-platform session show {session_id} {_trace_db_arg()} --limit {limit}",
+            traces=f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+        )
+    )
+    return payload
 
 
 @app.get("/api/console/traces")
 def console_traces_json(limit: int = Query(default=25, ge=1, le=500)) -> dict[str, Any]:
-    return {
+    payload = {
         "traces": [_trace_payload(trace) for trace in trace_store.list_recent(limit=limit)],
-        "cli": {"list": f"llm-platform trace list {_trace_db_arg()} --limit {limit}"},
     }
+    payload.update(
+        _cli_affordance(
+            f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+            list=f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+        )
+    )
+    return payload
 
 
 @app.get("/api/console/traces/{request_id}")
@@ -1313,18 +1392,27 @@ def console_trace_json(request_id: str) -> dict[str, Any]:
     if trace is None:
         raise HTTPException(status_code=404, detail=f"Trace not found: {request_id}")
     payload = _trace_payload(trace)
-    return {"trace": payload, "cli": payload["cli"]}
+    return {
+        "trace": payload,
+        "cli_command": payload["cli_command"],
+        "cli_commands": payload["cli_commands"],
+        "cli": payload["cli"],
+    }
 
 
 @app.get("/api/console/evals")
 def console_evals_json(limit: int = Query(default=25, ge=1, le=500)) -> dict[str, Any]:
-    return {
+    payload = {
         "eval_runs": [_eval_run_payload(run) for run in eval_store.list_runs(limit=limit)],
-        "cli": {
-            "run": f"llm-platform eval run {_trace_db_arg()} --session-id console-api-eval",
-            "list": f"llm-platform eval list {_trace_db_arg()}",
-        },
     }
+    payload.update(
+        _cli_affordance(
+            f"llm-platform eval list {_trace_db_arg()}",
+            run=f"llm-platform eval run {_trace_db_arg()} --session-id console-api-eval",
+            list=f"llm-platform eval list {_trace_db_arg()}",
+        )
+    )
+    return payload
 
 
 @app.post("/api/console/evals/run")
@@ -1340,21 +1428,23 @@ def console_eval_run_json(eval_request: ConsoleEvalRunRequest | None = None) -> 
         timeout_seconds=settings.provider_timeout_seconds,
         max_retries=settings.provider_max_retries,
     )
-    return {
+    payload = {
         "message": "Mock-mode eval completed without live provider credentials.",
         "eval_run": report,
         "traces": [
             _trace_payload(trace)
             for trace in trace_store.list_by_eval_run_id(report["eval_run_id"])
         ],
-        "cli": {
-            "run": (
-                f"llm-platform eval run {_trace_db_arg()} "
-                f"--session-id {eval_request.session_id}"
-            ),
-            "show": f"llm-platform eval show {report['eval_run_id']} {_trace_db_arg()}",
-        },
     }
+    run_command = f"llm-platform eval run {_trace_db_arg()} --session-id {eval_request.session_id}"
+    payload.update(
+        _cli_affordance(
+            run_command,
+            run=run_command,
+            show=f"llm-platform eval show {report['eval_run_id']} {_trace_db_arg()}",
+        )
+    )
+    return payload
 
 
 @app.get("/api/console/evals/{eval_run_id}")
@@ -1366,19 +1456,28 @@ def console_eval_json(eval_run_id: str) -> dict[str, Any]:
     return {
         "eval_run": eval_run,
         "traces": [_trace_payload(trace) for trace in trace_store.list_by_eval_run_id(eval_run_id)],
+        "cli_command": eval_run["cli_command"],
+        "cli_commands": eval_run["cli_commands"],
         "cli": eval_run["cli"],
     }
 
 
 @app.get("/api/console/prompts")
 def console_prompts_json() -> dict[str, Any]:
-    return {
+    payload = {
         "prompts": [
             _prompt_payload(prompt.prompt_id)
             for prompt in PromptRegistry().list()
         ],
-        "cli": {"list": "llm-platform prompts list"},
     }
+    payload.update(
+        _cli_affordance(
+            "llm-platform prompts list",
+            list="llm-platform prompts list",
+            compare="llm-platform eval compare --baseline-version 1 --candidate-version 2",
+        )
+    )
+    return payload
 
 
 @app.get("/api/console/prompts/{prompt_id}")
@@ -1387,22 +1486,28 @@ def console_prompt_json(
     version: int | None = Query(default=None),
 ) -> dict[str, Any]:
     prompt = _prompt_payload(prompt_id, version=version)
-    return {"prompt": prompt, "cli": prompt["cli"]}
+    return {
+        "prompt": prompt,
+        "cli_command": prompt["cli_command"],
+        "cli_commands": prompt["cli_commands"],
+        "cli": prompt["cli"],
+    }
 
 
 @app.get("/api/console/providers")
 def console_providers_json() -> dict[str, Any]:
-    return {
+    payload = {
         "providers": [_provider_payload(provider) for provider in ["mock", "openai", "custom"]],
         "active_provider": settings.provider,
-        "cli": {"health": "llm-platform health"},
     }
+    payload.update(_cli_affordance("llm-platform health", health="llm-platform health"))
+    return payload
 
 
 @app.post("/api/console/providers/{provider_name}/test")
 def console_provider_test_json(provider_name: str) -> dict[str, Any]:
     provider = _provider_payload(provider_name)
-    return {
+    payload = {
         "provider": provider,
         "test": {
             "status": "ready" if provider["ready"] else "not_configured",
@@ -1413,8 +1518,9 @@ def console_provider_test_json(provider_name: str) -> dict[str, Any]:
                 else "Configuration metadata checked; no live provider call was made."
             ),
         },
-        "cli": {"health": "llm-platform health"},
     }
+    payload.update(_cli_affordance("llm-platform health", health="llm-platform health"))
+    return payload
 
 
 @app.get("/api/console/reviews")
@@ -1422,11 +1528,17 @@ def console_reviews_json(
     include_decided: bool = Query(default=False),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> dict[str, Any]:
-    return {
+    payload = {
         **_review_queue_payload(limit=limit, include_decided=include_decided),
-        "cli": {"traces": f"llm-platform trace list {_trace_db_arg()} --limit {limit}"},
         "links": {"ui": "/reviews"},
     }
+    payload.update(
+        _cli_affordance(
+            f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+            traces=f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+        )
+    )
+    return payload
 
 
 @app.get("/api/console/settings")
@@ -1441,11 +1553,13 @@ def console_settings_update_json(request: ConsoleSettingsUpdateRequest) -> dict[
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _reload_runtime_settings()
-    return {
+    payload = {
         "message": "Updated user.env and reloaded runtime settings. The private .env file was not touched.",
         "updated_keys": sorted(request.settings),
         "settings": _settings_payload(),
     }
+    payload.update(_cli_affordance("llm-platform health", health="llm-platform health"))
+    return payload
 
 
 @app.post("/classify-ticket")

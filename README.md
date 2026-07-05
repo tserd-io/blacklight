@@ -185,6 +185,26 @@ Expected response:
 
 The image defaults to `LLM_PROVIDER=mock`, `LLM_MODEL=mock-ticket-classifier`, and `TRACE_DB_PATH=/app/data/traces.sqlite3`, so no API key or live provider is required. Override those environment variables with `docker run -e ...` when testing a real provider configuration.
 
+## Console CLI Equivalents
+
+Console API responses include a copy-friendly `cli_command` plus named `cli_commands` for related next steps. These commands are intended to run as shown, so the browser console can teach the terminal workflow rather than hiding it.
+
+Examples:
+
+```bash
+llm-platform demo --verbose --trace-db-path traces.sqlite3
+llm-platform classify --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --session-id demo --trace-db-path traces.sqlite3
+llm-platform trace list --trace-db-path traces.sqlite3 --limit 10
+llm-platform trace show seed-demo:billing-success --trace-db-path traces.sqlite3
+llm-platform eval run --trace-db-path traces.sqlite3 --session-id eval-demo
+llm-platform eval show seed-demo-eval --trace-db-path traces.sqlite3
+llm-platform prompts show ticket_classifier
+llm-platform eval compare --baseline-version 1 --candidate-version 2
+llm-platform health
+```
+
+Review queue and provider-readiness screens use existing executable equivalents today: `llm-platform trace list ...` for reviewable outputs and `llm-platform health` for provider configuration status.
+
 ## Eval Example
 
 Run deterministic evals:
