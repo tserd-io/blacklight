@@ -24,6 +24,86 @@ class ProviderFailureClassifier:
         )
 
 
+def _build_session_history_store(tmp_path):
+    store = TraceStore(tmp_path / "traces.sqlite3")
+    records = [
+        TraceRecord(
+            request_id="request-1",
+            session_id="session-a",
+            prompt_id="ticket_classifier",
+            prompt_version=1,
+            provider="mock",
+            model="mock-ticket-classifier",
+            latency_ms=10,
+            input_tokens=10,
+            output_tokens=5,
+            estimated_cost_usd=0.0,
+            validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.accepted,
+        ),
+        TraceRecord(
+            request_id="request-2",
+            session_id="session-a",
+            prompt_id="ticket_classifier",
+            prompt_version=2,
+            provider="openai",
+            model="gpt-4.1-mini",
+            latency_ms=25,
+            input_tokens=20,
+            output_tokens=7,
+            estimated_cost_usd=0.00003,
+            validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.needs_review,
+        ),
+        TraceRecord(
+            request_id="request-3",
+            session_id="session-a",
+            prompt_id="ticket_classifier",
+            prompt_version=2,
+            provider="openai",
+            model="gpt-4.1-mini",
+            latency_ms=30,
+            input_tokens=12,
+            output_tokens=6,
+            estimated_cost_usd=0.00002,
+            validation_passed=False,
+            guardrail_outcome=GuardrailOutcome.rejected,
+        ),
+        TraceRecord(
+            request_id="request-4",
+            session_id="session-a",
+            prompt_id="ticket_classifier",
+            prompt_version=2,
+            provider="custom",
+            model="local-model",
+            latency_ms=40,
+            input_tokens=8,
+            output_tokens=0,
+            estimated_cost_usd=0.0,
+            validation_passed=False,
+            guardrail_outcome=GuardrailOutcome.accepted,
+            error_category="provider_timeout",
+        ),
+        TraceRecord(
+            request_id="request-other",
+            session_id="session-b",
+            prompt_id="ticket_classifier",
+            prompt_version=1,
+            provider="mock",
+            model="mock-ticket-classifier",
+            latency_ms=10,
+            input_tokens=10,
+            output_tokens=5,
+            estimated_cost_usd=0.0,
+            validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.accepted,
+        ),
+    ]
+    for record in records:
+        store.insert(record)
+    return store
+
+
 def test_metrics_endpoint_returns_expanded_trace_metrics(tmp_path):
     original_trace_store = api.trace_store
     store = TraceStore(tmp_path / "traces.sqlite3")
@@ -61,6 +141,91 @@ def test_metrics_endpoint_returns_expanded_trace_metrics(tmp_path):
     assert payload["by_model"][0]["model"] == "mock-ticket-classifier"
     assert payload["by_provider_model"][0]["provider"] == "mock"
     assert payload["by_guardrail_outcome"][0]["guardrail_outcome"] == "rejected"
+
+
+def test_session_history_json_returns_filtered_session_timeline(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "trace_store", _build_session_history_store(tmp_path))
+
+    response = TestClient(api.app).get("/api/sessions/session-a?status=needs_review")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["session_id"] == "session-a"
+    assert payload["status_filter"] == "needs_review"
+    assert payload["summary"]["request_count"] == 4
+    assert payload["summary"]["total_tokens"] == 68
+    assert payload["summary"]["total_estimated_cost_usd"] == 0.00005
+    assert payload["summary"]["failure_count"] == 1
+    assert payload["summary"]["review_count"] == 1
+    assert payload["filtered_summary"]["request_count"] == 1
+    assert [trace["request_id"] for trace in payload["traces"]] == ["request-2"]
+    assert payload["traces"][0]["status"] == "needs_review"
+    assert payload["traces"][0]["review_url"] == "/sessions/session-a/review/request-2"
+
+
+def test_session_history_json_filters_failed_requests(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "trace_store", _build_session_history_store(tmp_path))
+
+    response = TestClient(api.app).get("/api/sessions/session-a?status=failed")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert [trace["request_id"] for trace in payload["traces"]] == ["request-4"]
+    assert payload["traces"][0]["failure_reason"] == "provider_timeout"
+
+
+def test_session_history_page_shows_cost_status_and_review_links(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "trace_store", _build_session_history_store(tmp_path))
+
+    response = TestClient(api.app).get("/sessions/session-a")
+
+    assert response.status_code == 200
+    assert "Session session-a" in response.text
+    assert "$0.00005000" in response.text
+    assert "Needs Review" in response.text
+    assert "Provider Timeout" in response.text
+    assert "mock-ticket-classifier" in response.text
+    assert "gpt-4.1-mini" in response.text
+    assert 'href="/sessions/session-a/review/request-2"' in response.text
+
+
+def test_session_review_page_shows_reviewable_trace(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "trace_store", _build_session_history_store(tmp_path))
+
+    response = TestClient(api.app).get("/sessions/session-a/review/request-2")
+
+    assert response.status_code == 200
+    assert "Review Trace" in response.text
+    assert "request-2" in response.text
+    assert "needs_review" in response.text
+
+
+def test_session_review_page_rejects_non_reviewable_trace(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "trace_store", _build_session_history_store(tmp_path))
+
+    response = TestClient(api.app).get("/sessions/session-a/review/request-1")
+
+    assert response.status_code == 404
+
+
+def test_session_history_missing_session_returns_structured_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "trace_store", _build_session_history_store(tmp_path))
+
+    response = TestClient(api.app).get("/api/sessions/missing-session")
+    payload = response.json()
+
+    assert response.status_code == 404
+    assert payload["detail"]["category"] == "session_not_found"
+    assert payload["detail"]["message"] == "Session not found: missing-session"
+
+
+def test_session_history_rejects_unknown_filter(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "trace_store", _build_session_history_store(tmp_path))
+
+    response = TestClient(api.app).get("/api/sessions/session-a?status=unknown")
+
+    assert response.status_code == 400
+    assert "Unknown session status filter" in response.json()["detail"]
 
 
 def test_classify_endpoint_returns_structured_validation_errors():

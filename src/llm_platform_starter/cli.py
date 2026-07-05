@@ -23,6 +23,7 @@ from llm_platform_starter.observability.idempotency import IdempotencyStore
 from llm_platform_starter.observability.storage import TraceStore
 from llm_platform_starter.prompts.registry import PromptRegistry
 from llm_platform_starter.providers.factory import create_provider
+from llm_platform_starter.session_history import summarize_session, trace_detail
 from llm_platform_starter.settings import load_settings
 
 
@@ -32,83 +33,6 @@ def _print_json(payload: dict[str, Any]) -> None:
 
 def _print_error(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, indent=2), file=sys.stderr)
-
-
-def _trace_detail(trace: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "request_id": trace["request_id"],
-        "session_id": trace["session_id"],
-        "eval_run_id": trace["eval_run_id"],
-        "prompt_id": trace["prompt_id"],
-        "prompt_version": trace["prompt_version"],
-        "provider": trace["provider"],
-        "model": trace["model"],
-        "latency_ms": trace["latency_ms"],
-        "input_tokens": trace["input_tokens"],
-        "output_tokens": trace["output_tokens"],
-        "estimated_cost_usd": trace["estimated_cost_usd"],
-        "validation_passed": trace["validation_passed"],
-        "guardrail_outcome": trace["guardrail_outcome"],
-        "error_category": trace["error_category"],
-        "created_at": trace["created_at"],
-    }
-
-
-def _summarize_session(traces: list[dict[str, Any]]) -> dict[str, Any]:
-    request_count = len(traces)
-    total_input_tokens = sum(trace["input_tokens"] for trace in traces)
-    total_output_tokens = sum(trace["output_tokens"] for trace in traces)
-    failure_count = sum(1 for trace in traces if trace["error_category"] is not None)
-    review_count = sum(1 for trace in traces if trace["guardrail_outcome"] == "needs_review")
-    validation_failure_count = sum(1 for trace in traces if not trace["validation_passed"])
-
-    return {
-        "request_count": request_count,
-        "total_input_tokens": total_input_tokens,
-        "total_output_tokens": total_output_tokens,
-        "total_tokens": total_input_tokens + total_output_tokens,
-        "total_estimated_cost_usd": round(
-            sum(trace["estimated_cost_usd"] for trace in traces),
-            8,
-        ),
-        "failure_count": failure_count,
-        "failure_rate": round(failure_count / request_count, 4) if request_count else 0.0,
-        "review_count": review_count,
-        "validation_failure_count": validation_failure_count,
-        "by_provider_model": _group_session_traces(traces, ["provider", "model"]),
-    }
-
-
-def _group_session_traces(traces: list[dict[str, Any]], keys: list[str]) -> list[dict[str, Any]]:
-    groups: dict[tuple[Any, ...], dict[str, Any]] = {}
-    for trace in traces:
-        group_key = tuple(trace[key] for key in keys)
-        group = groups.setdefault(
-            group_key,
-            {
-                **{key: trace[key] for key in keys},
-                "request_count": 0,
-                "total_tokens": 0,
-                "total_estimated_cost_usd": 0.0,
-                "failure_count": 0,
-                "review_count": 0,
-            },
-        )
-        group["request_count"] += 1
-        group["total_tokens"] += trace["input_tokens"] + trace["output_tokens"]
-        group["total_estimated_cost_usd"] += trace["estimated_cost_usd"]
-        if trace["error_category"] is not None:
-            group["failure_count"] += 1
-        if trace["guardrail_outcome"] == "needs_review":
-            group["review_count"] += 1
-
-    grouped = []
-    for group in groups.values():
-        request_count = group["request_count"]
-        group["total_estimated_cost_usd"] = round(group["total_estimated_cost_usd"], 8)
-        group["failure_rate"] = round(group["failure_count"] / request_count, 4)
-        grouped.append(group)
-    return sorted(grouped, key=lambda group: (-group["request_count"], group["provider"], group["model"]))
 
 
 def classify(args: argparse.Namespace) -> int:
@@ -273,7 +197,7 @@ def trace_show(args: argparse.Namespace) -> int:
     if trace is None:
         _print_error(trace_not_found_error(args.request_id).as_payload())
         return 1
-    _print_json({"trace": _trace_detail(trace)})
+    _print_json({"trace": trace_detail(trace)})
     return 0
 
 
@@ -284,11 +208,11 @@ def session_show(args: argparse.Namespace) -> int:
     if not traces:
         _print_error(session_not_found_error(args.session_id).as_payload())
         return 1
-    trace_details = [_trace_detail(trace) for trace in traces]
+    trace_details = [trace_detail(trace) for trace in traces]
     _print_json(
         {
             "session_id": args.session_id,
-            "summary": _summarize_session(trace_details),
+            "summary": summarize_session(trace_details),
             "traces": trace_details,
         }
     )
