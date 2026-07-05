@@ -43,14 +43,25 @@ Milestone 3 is complete as a portfolio-grade documentation pass. The project now
 - public issue-ticket packages that separate CLI-ready release work from later business-user app productization
 - passing test, lint, documented command smoke, API smoke, public-safe data, and internal doc-link checks
 
+## Milestone 4 Completion
+
+Milestone 4 is complete as a CLI-ready package and release-preparation pass. The project now supports:
+
+- Docker API packaging for mock-mode smoke testing
+- GitHub Actions CI that runs linting and tests without provider secrets
+- v0.1.0 release notes for the CLI-ready MVP
+- operational cost and ownership guidance for regular live runs
+- session history trace review from the CLI
+- optional Ollama local-runtime configuration through the custom provider path
+- final QA checks for tests, linting, CLI smoke, API smoke, eval smoke, docs links, ignored private plans, and GitHub Actions
+
+Docker was not available on the local QA machine, so Docker and Ollama runtime smoke checks are recorded as a local limitation rather than a passed local check. The `v0.1.0` tag should be created only after final human approval.
+
 ## Next
 
 - Complete the public [issue ticket packages](issues/index.md):
-  - [Milestone 4: CLI-Ready Package And Release](issues/milestone-4.md)
   - [Milestone 5: Business-User App Productization](issues/milestone-5.md)
 - Add architecture screenshots or terminal examples to the README
-- Add a lightweight Dockerfile for API/CLI smoke testing
-- Add session history trace view for operational review
 
 ## Later
 

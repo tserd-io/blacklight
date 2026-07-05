@@ -58,3 +58,31 @@ curl http://127.0.0.1:8000/health
 ### Tagging Note
 
 Create the `v0.1.0` tag only after final QA and release approval confirm that tests, linting, CLI/API/eval smoke checks, Docker smoke checks where available, public docs, and GitHub Actions are ready.
+
+### Final QA Record
+
+Milestone 4 final QA was run on July 5, 2026 for the CLI-ready release branch.
+
+Passed checks:
+
+- `ruff check .`
+- `pytest`
+- `llm-platform health`
+- `llm-platform classify --trace-db-path .tmp\milestone4-final-qa.sqlite3 --session-id m4-final-cli`
+- `llm-platform eval run --trace-db-path .tmp\milestone4-final-qa.sqlite3 --session-id m4-final-eval`
+- `llm-platform metrics --trace-db-path .tmp\milestone4-final-qa.sqlite3`
+- `llm-platform session show m4-final-cli --trace-db-path .tmp\milestone4-final-qa.sqlite3`
+- FastAPI `/health` smoke check
+- FastAPI `/classify-ticket` smoke check
+- internal Markdown link scan
+- `git diff --check`
+- `plans/` ignore check
+- GitHub Actions CI on the release branch
+
+Documented limitation:
+
+- Docker was not available on the local QA machine, so Docker image and Ollama runtime smoke checks were not run locally. The release includes Docker and Ollama configuration for environments where Docker is installed.
+
+Tag status:
+
+- `v0.1.0` was not created during this branch QA pass. Create the tag only after final human approval.
