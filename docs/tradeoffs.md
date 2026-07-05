@@ -128,6 +128,158 @@ What is deferred:
 
 The MVP keeps reliability close to the provider call so reviewers can see the behavior without learning an orchestration framework.
 
+## Backend Choices
+
+Backend decisions fall into two categories: where model inference runs, and where operational data is stored or exported. The MVP uses the simplest local choices, but the boundaries are meant to make production backends replaceable.
+
+### Model backends
+
+#### Mock provider
+
+Use the mock provider for development, CI, demos, and public-safe examples.
+
+Why an organization would use it:
+
+- prove workflow behavior before paying for live calls
+- keep tests deterministic
+- avoid sending data outside the local environment
+- make onboarding work without credentials
+
+Tradeoff:
+
+- it does not prove real model quality, provider latency, pricing, rate-limit behavior, or vendor reliability
+
+#### Hosted API provider
+
+Hosted APIs include providers such as OpenAI, Azure OpenAI, Anthropic, Google, or similar managed model services.
+
+Why an organization would use it:
+
+- fastest path to strong model quality
+- no GPU procurement or inference operations
+- easier burst scaling
+- clear per-token pricing model
+
+Tradeoff:
+
+- vendor dependency, data-governance review, per-token spend, provider rate limits, and exposure to pricing or API changes
+
+Hosted APIs are usually the right first production choice when the organization values speed, model quality, and lower infrastructure burden.
+
+#### Local or on-prem provider
+
+Local providers include Ollama, LM Studio, llama.cpp, vLLM, or a private localhost HTTP endpoint.
+
+Why an organization would use it:
+
+- stronger data control
+- offline or private-network operation
+- no external per-token API bill
+- reuse of existing hardware
+- ability to standardize on an open model
+
+Tradeoff:
+
+- hardware cost, electricity, model downloads, runtime tuning, security patching, uptime, capacity planning, and potentially lower model quality
+
+Local inference is most defensible when privacy or control matters, hardware already exists, or the same model serves enough workflows to keep utilization high. For a low-volume workload, dedicated hardware can be more expensive per run than a hosted API.
+
+For a CLI-ready package, local inference is more shippable as an optional fallback than as the required primary path. A fallback can be used when a hosted provider is unavailable, a cost ceiling is reached, data cannot leave the environment, or a degraded private/offline response is acceptable. That fallback should be visible in traces through provider metadata and a fallback reason rather than silently changing behavior.
+
+For a business-user desktop app, the tradeoff changes. If the app provides an installer, app icon, first-run setup, model readiness checks, and managed model download or bundled model support, local inference can be a polished product feature instead of a developer setup burden. That belongs in a later app-productization milestone, separate from the CLI-ready package.
+
+#### Self-hosted cloud model
+
+Self-hosted cloud inference runs open or private models on cloud GPUs through tools such as vLLM, TGI, or a Kubernetes deployment.
+
+Why an organization would use it:
+
+- more control than hosted APIs
+- cloud elasticity without buying hardware
+- ability to tune model/runtime choices
+- clearer network and data boundaries than public APIs in some organizations
+
+Tradeoff:
+
+- GPU costs, deployment complexity, autoscaling, monitoring, incident response, and capacity management
+
+This is a better fit for teams that already operate cloud infrastructure and need control beyond what a hosted API offers.
+
+### Storage and observability backends
+
+#### SQLite
+
+SQLite is the MVP trace, eval, and idempotency backend.
+
+Why an organization would use it:
+
+- local development
+- demos
+- single-process tools
+- lightweight proof of traceability
+
+Tradeoff:
+
+- not a multi-service production observability backend and not ideal for long retention, dashboards, or concurrent distributed writers
+
+#### Postgres or managed relational database
+
+A relational database is the natural first production step for trace and eval history.
+
+Why an organization would use it:
+
+- durable records
+- joins across sessions, eval runs, cases, and traces
+- backups and access control
+- familiar operational model
+
+Tradeoff:
+
+- schema migrations, database hosting, credentials, retention policy, and query performance work
+
+#### Warehouse or analytics backend
+
+Warehouses such as BigQuery, Snowflake, or Databricks are better for reporting than request-time debugging.
+
+Why an organization would use it:
+
+- cost reports
+- usage trends
+- model/provider comparisons
+- automation ROI analysis
+
+Tradeoff:
+
+- not usually the first place an operator debugs a live request
+
+#### OpenTelemetry or monitoring backend
+
+OpenTelemetry exporters send traces and metrics to tools such as Datadog, Honeycomb, Grafana, Jaeger, New Relic, or an OpenTelemetry Collector.
+
+Why an organization would use it:
+
+- production dashboards
+- alerting
+- distributed trace timelines
+- latency and failure-rate monitoring
+
+Tradeoff:
+
+- instrumentation discipline, backend cost, and operational setup
+
+This is the right direction when the workflow becomes business-critical enough that failures, latency, and cost regressions need active monitoring.
+
+### Rule of thumb
+
+- Use `mock` to build safely.
+- Use hosted APIs to move fast.
+- Use local/on-prem inference when control or privacy outweighs operating complexity.
+- Use self-hosted cloud inference when customization matters and the team can operate infrastructure.
+- Use SQLite for the local MVP.
+- Use Postgres for production history.
+- Use OpenTelemetry or monitoring tools for live operations.
+- Use a warehouse for cost, usage, and ROI reporting.
+
 ## Deferred Production Features
 
 These are intentionally out of scope for the starter:
