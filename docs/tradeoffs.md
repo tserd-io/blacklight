@@ -296,7 +296,7 @@ These are intentionally out of scope for the starter:
 - RAG retrieval service
 - Kubernetes deployment manifests
 - advanced eval rubrics and human review UI
-- operational cost and ownership guide for regular live runs
+- managed operational budgets, ownership approvals, and escalation workflows for regular live runs
 
 Each item has a natural production path, but adding all of them would bury the core platform pattern. The MVP is intentionally a scaffold: enough to show how the pieces connect, small enough to audit quickly.
 
@@ -310,5 +310,7 @@ The next production version would likely replace local defaults with managed ser
 - route `needs_review` outputs to a task queue or review tool
 - add live provider smoke tests behind secrets and explicit flags
 - use trace metrics to monitor cost, latency, failure rate, validation rate, and review volume
+
+See [operational-cost-and-ownership.md](operational-cost-and-ownership.md) for a concrete cost model for regular live runs.
 
 The implementation is deliberately shaped so those extensions are additive rather than a rewrite.
