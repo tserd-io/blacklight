@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from llm_platform_starter.cli import main
 from llm_platform_starter.observability.evaluations import EvalMetricStore
 
@@ -214,7 +216,50 @@ def test_trace_show_missing_record_returns_clear_error(capsys, tmp_path):
 
     exit_code = main(["trace", "show", "missing-request", "--trace-db-path", str(trace_db_path)])
     captured = capsys.readouterr()
+    payload = json.loads(captured.err)
 
     assert exit_code == 1
     assert captured.out == ""
-    assert "Trace not found: missing-request" in captured.err
+    assert payload["error"]["category"] == "trace_not_found"
+    assert payload["error"]["message"] == "Trace not found: missing-request"
+    assert "trace list" in payload["error"]["next_step"]
+
+
+def test_classify_configuration_error_returns_actionable_cli_error(
+    capsys,
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    exit_code = main(
+        [
+            "classify",
+            "--subject",
+            "Refund",
+            "--body",
+            "Duplicate charge",
+            "--trace-db-path",
+            str(tmp_path / "traces.sqlite3"),
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.err)
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert payload["error"]["category"] == "configuration_error"
+    assert "OPENAI_API_KEY" in payload["error"]["message"]
+    assert "llm-platform health" in payload["error"]["next_step"]
+
+
+def test_cli_debug_error_mode_reraises_unexpected_errors(monkeypatch):
+    def broken_health(_args):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("llm_platform_starter.cli.health", broken_health)
+    monkeypatch.setenv("LLM_PLATFORM_DEBUG_ERRORS", "1")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        main(["health"])

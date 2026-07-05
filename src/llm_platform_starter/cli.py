@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from typing import Any
 
+from llm_platform_starter.errors import describe_exception, is_known_error, trace_not_found_error
 from llm_platform_starter.evals.runner import run_ticket_classification_eval
 from llm_platform_starter.examples.ticket_classifier import TicketClassifier
 from llm_platform_starter.models import TicketRequest
@@ -20,8 +22,8 @@ def _print_json(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, indent=2))
 
 
-def _print_error(message: str) -> None:
-    print(message, file=sys.stderr)
+def _print_error(payload: dict[str, Any]) -> None:
+    print(json.dumps(payload, indent=2), file=sys.stderr)
 
 
 def _trace_detail(trace: dict[str, Any]) -> dict[str, Any]:
@@ -178,7 +180,7 @@ def trace_show(args: argparse.Namespace) -> int:
     trace_store = TraceStore(args.trace_db_path or settings.trace_db_path)
     trace = trace_store.get_by_request_id(args.request_id)
     if trace is None:
-        _print_error(f"Trace not found: {args.request_id}")
+        _print_error(trace_not_found_error(args.request_id).as_payload())
         return 1
     _print_json({"trace": _trace_detail(trace)})
     return 0
@@ -310,7 +312,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except Exception as exc:
+        if not is_known_error(exc) and os.getenv("LLM_PLATFORM_DEBUG_ERRORS") == "1":
+            raise
+        _print_error(describe_exception(exc).as_payload())
+        return 1
 
 
 if __name__ == "__main__":
