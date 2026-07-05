@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import re
 
-from llm_platform_starter.models import ProviderRequest, ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderRequest, ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class MockProvider(LLMProvider):

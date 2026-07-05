@@ -1,10 +1,10 @@
-from llm_platform_starter.demo_seed import (
+from blacklight.demo_seed import (
     DEMO_SEED_EVAL_RUN_ID,
     DEMO_SEED_SESSION_ID,
     seed_demo_data,
 )
-from llm_platform_starter.observability.evaluations import EvalMetricStore
-from llm_platform_starter.observability.storage import TraceStore
+from blacklight.observability.evaluations import EvalMetricStore
+from blacklight.observability.storage import TraceStore
 
 
 def test_seed_demo_data_creates_linked_mock_records(tmp_path):

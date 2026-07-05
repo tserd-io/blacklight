@@ -16,7 +16,7 @@
 
 Milestone 1 is complete as a runnable MVP. The project now supports:
 
-- `llm-platform` CLI entry points for classification, evals, metrics, health, prompts, and traces
+- `blacklight` CLI entry points for classification, evals, metrics, health, prompts, and traces
 - configurable provider creation for mock, OpenAI, and user-owned providers
 - retry, timeout, per-session rate limiting, idempotency, and provider failure tracing
 - richer eval reports with persisted run/case metrics and per-case trace links

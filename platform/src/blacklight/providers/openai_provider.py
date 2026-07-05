@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from llm_platform_starter.models import ProviderRequest, ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderRequest, ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class OpenAIProvider(LLMProvider):

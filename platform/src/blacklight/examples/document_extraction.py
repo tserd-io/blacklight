@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from llm_platform_starter.models import GuardrailOutcome
+from blacklight.models import GuardrailOutcome
 
 
 class ProjectAddress(BaseModel):

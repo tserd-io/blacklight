@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from llm_platform_starter.models import TraceRecord
+from blacklight.models import TraceRecord
 
 
 class TraceStore:

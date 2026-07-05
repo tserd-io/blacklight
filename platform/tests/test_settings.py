@@ -1,6 +1,6 @@
 import pytest
 
-from llm_platform_starter.settings import load_settings, load_user_env, write_user_env
+from blacklight.settings import load_settings, load_user_env, write_user_env
 
 
 def test_provider_reliability_settings_load_from_environment(monkeypatch):

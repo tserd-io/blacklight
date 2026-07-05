@@ -11,26 +11,26 @@ from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from llm_platform_starter.errors import GuardrailValidationError, describe_exception, session_not_found_error
-from llm_platform_starter.evals.runner import run_ticket_classification_eval
-from llm_platform_starter.examples.ticket_classifier import TicketClassifier
-from llm_platform_starter.models import TicketClassification, TicketRequest
-from llm_platform_starter.observability.idempotency import (
+from blacklight.errors import GuardrailValidationError, describe_exception, session_not_found_error
+from blacklight.evals.runner import run_ticket_classification_eval
+from blacklight.examples.ticket_classifier import TicketClassifier
+from blacklight.models import TicketClassification, TicketRequest
+from blacklight.observability.idempotency import (
     IdempotencyInProgressError,
     IdempotencyStore,
 )
-from llm_platform_starter.observability.evaluations import EvalMetricStore
-from llm_platform_starter.observability.reviews import ReviewDecisionStore
-from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.providers.factory import ProviderConfigurationError, create_provider
-from llm_platform_starter.providers.mock import MockProvider
-from llm_platform_starter.providers.reliability import ProviderCallError
-from llm_platform_starter.prompts.registry import PromptRegistry
-from llm_platform_starter.session_history import (
+from blacklight.observability.evaluations import EvalMetricStore
+from blacklight.observability.reviews import ReviewDecisionStore
+from blacklight.observability.storage import TraceStore
+from blacklight.providers.factory import ProviderConfigurationError, create_provider
+from blacklight.providers.mock import MockProvider
+from blacklight.providers.reliability import ProviderCallError
+from blacklight.prompts.registry import PromptRegistry
+from blacklight.session_history import (
     build_session_history,
     session_trace_detail,
 )
-from llm_platform_starter.settings import (
+from blacklight.settings import (
     SECRET_ENV_KEYS,
     USER_EDITABLE_ENV_KEYS,
     get_user_env_path,
@@ -105,7 +105,7 @@ try:
 except ProviderConfigurationError as exc:
     classifier_startup_error = exc
 
-app = FastAPI(title="LLM Platform Starter", version="0.1.0")
+app = FastAPI(title="Blacklight Studio", version="0.1.0")
 
 
 def _label(value: Any) -> str:
@@ -329,10 +329,10 @@ def _prompt_payload(prompt_id: str, version: int | None = None) -> dict[str, Any
     }
     payload.update(
         _cli_affordance(
-            f"llm-platform prompts show {prompt.prompt_id}{version_arg}",
-            show=f"llm-platform prompts show {prompt.prompt_id}{version_arg}",
-            list="llm-platform prompts list",
-            compare="llm-platform eval compare --baseline-version 1 --candidate-version 2",
+            f"blacklight prompts show {prompt.prompt_id}{version_arg}",
+            show=f"blacklight prompts show {prompt.prompt_id}{version_arg}",
+            list="blacklight prompts list",
+            compare="blacklight eval compare --baseline-version 1 --candidate-version 2",
         )
     )
     return payload
@@ -349,10 +349,10 @@ def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
     }
     payload.update(
         _cli_affordance(
-            f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
-            show=f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
-            session=f"llm-platform session show {trace['session_id']} {_trace_db_arg()}",
-            list=f"llm-platform trace list {_trace_db_arg()} --limit 10",
+            f"blacklight trace show {trace['request_id']} {_trace_db_arg()}",
+            show=f"blacklight trace show {trace['request_id']} {_trace_db_arg()}",
+            session=f"blacklight session show {trace['session_id']} {_trace_db_arg()}",
+            list=f"blacklight trace list {_trace_db_arg()} --limit 10",
         )
     )
     if detail["reviewable"]:
@@ -362,7 +362,7 @@ def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
     if trace["eval_run_id"]:
         payload["links"]["eval_api"] = f"/api/console/evals/{trace['eval_run_id']}"
         payload["cli_commands"]["eval"] = (
-            f"llm-platform eval show {trace['eval_run_id']} {_trace_db_arg()}"
+            f"blacklight eval show {trace['eval_run_id']} {_trace_db_arg()}"
         )
         payload["cli"]["eval"] = payload["cli_commands"]["eval"]
     return payload
@@ -393,8 +393,8 @@ def _session_run_summaries(limit: int = 50) -> list[dict[str, Any]]:
         session["total_estimated_cost_usd"] = round(session["total_estimated_cost_usd"], 8)
         session.update(
             _cli_affordance(
-                f"llm-platform session show {session['session_id']} {_trace_db_arg()}",
-                show=f"llm-platform session show {session['session_id']} {_trace_db_arg()}",
+                f"blacklight session show {session['session_id']} {_trace_db_arg()}",
+                show=f"blacklight session show {session['session_id']} {_trace_db_arg()}",
             )
         )
         session["links"] = {
@@ -426,7 +426,7 @@ def _workflow_payload(workflow_id: str = "ticket_classifier") -> dict[str, Any]:
         },
     }
     run_command = (
-        f"llm-platform classify --subject {_quote_cli_arg('Refund request')} "
+        f"blacklight classify --subject {_quote_cli_arg('Refund request')} "
         f"--body {_quote_cli_arg('Customer asks for a refund after duplicate billing.')} "
         f"--session-id console-api-demo {_trace_db_arg()}"
     )
@@ -434,7 +434,7 @@ def _workflow_payload(workflow_id: str = "ticket_classifier") -> dict[str, Any]:
         _cli_affordance(
             run_command,
             run=run_command,
-            demo=f"llm-platform demo --verbose {_trace_db_arg()}",
+            demo=f"blacklight demo --verbose {_trace_db_arg()}",
         )
     )
     return payload
@@ -452,10 +452,10 @@ def _eval_run_payload(run: dict[str, Any]) -> dict[str, Any]:
     }
     payload.update(
         _cli_affordance(
-            f"llm-platform eval show {eval_run_id} {_trace_db_arg()}",
-            show=f"llm-platform eval show {eval_run_id} {_trace_db_arg()}",
-            list=f"llm-platform eval list {_trace_db_arg()}",
-            run=f"llm-platform eval run {_trace_db_arg()} --session-id {run['session_id']}",
+            f"blacklight eval show {eval_run_id} {_trace_db_arg()}",
+            show=f"blacklight eval show {eval_run_id} {_trace_db_arg()}",
+            list=f"blacklight eval list {_trace_db_arg()}",
+            run=f"blacklight eval run {_trace_db_arg()} --session-id {run['session_id']}",
         )
     )
     return payload
@@ -485,9 +485,9 @@ def _provider_payload(provider: str) -> dict[str, Any]:
     }
     payload.update(
         _cli_affordance(
-            "llm-platform health",
-            health="llm-platform health",
-            demo=f"llm-platform demo --verbose {_trace_db_arg()}",
+            "blacklight health",
+            health="blacklight health",
+            demo=f"blacklight demo --verbose {_trace_db_arg()}",
         )
     )
     return payload
@@ -587,7 +587,7 @@ def _settings_payload() -> dict[str, Any]:
         "user_env": _user_env_payload(user_env),
         "editable_settings": _editable_settings_catalog(),
     }
-    payload.update(_cli_affordance("llm-platform health", health="llm-platform health"))
+    payload.update(_cli_affordance("blacklight health", health="blacklight health"))
     return payload
 
 
@@ -618,10 +618,10 @@ def _dashboard_payload(limit: int = 5) -> dict[str, Any]:
     }
     payload.update(
         _cli_affordance(
-            f"llm-platform demo --verbose {_trace_db_arg()}",
-            guided_demo=f"llm-platform demo --verbose {_trace_db_arg()}",
-            seed_demo_data=f"llm-platform seed demo-data {_trace_db_arg()}",
-            health="llm-platform health",
+            f"blacklight demo --verbose {_trace_db_arg()}",
+            guided_demo=f"blacklight demo --verbose {_trace_db_arg()}",
+            seed_demo_data=f"blacklight seed demo-data {_trace_db_arg()}",
+            health="blacklight health",
         )
     )
     return payload
@@ -654,8 +654,8 @@ def _render_console_dashboard() -> HTMLResponse:
   <div class="panel"><h2>Pending Review</h2><div class="metric">{review_payload["summary"]["pending_count"]}</div></div>
 </section>
 <section class="grid">
-  {_console_command_panel("llm-platform demo --verbose")}
-  {_console_command_panel("llm-platform seed demo-data --trace-db-path traces.sqlite3")}
+  {_console_command_panel("blacklight demo --verbose")}
+  {_console_command_panel("blacklight seed demo-data --trace-db-path traces.sqlite3")}
 </section>
 <h2>Recent Traces</h2>
 <table>
@@ -697,7 +697,7 @@ def _console_eval_row(run: dict[str, Any]) -> str:
   <td data-label="Session"><a href="/sessions/{session_id}">{session_id}</a></td>
   <td data-label="Prompt">{escape(run["prompt_id"])} v{run["prompt_version"]}</td>
   <td data-label="Accuracy">{run["accuracy"]}</td>
-  <td data-label="Inspect">{_cli_command(f"llm-platform eval show {run['eval_run_id']} --trace-db-path {settings.trace_db_path}")}</td>
+  <td data-label="Inspect">{_cli_command(f"blacklight eval show {run['eval_run_id']} --trace-db-path {settings.trace_db_path}")}</td>
 </tr>"""
 
 
@@ -743,8 +743,8 @@ def _render_console_demo_result(payload: dict[str, Any]) -> HTMLResponse:
 </div>
 <section class="grid">
   <div class="panel"><h2>Trace</h2><p><code>{request_id}</code></p></div>
-  {_console_command_panel("llm-platform demo --verbose")}
-  {_console_command_panel(f"llm-platform trace show {trace['request_id']} --trace-db-path {settings.trace_db_path}")}
+  {_console_command_panel("blacklight demo --verbose")}
+  {_console_command_panel(f"blacklight trace show {trace['request_id']} --trace-db-path {settings.trace_db_path}")}
 </section>"""
     return _console_shell(active="workflows", title="Demo Result", body=body)
 
@@ -760,7 +760,7 @@ def _render_console_workflows() -> HTMLResponse:
     <p>Model: {escape(settings.model)}</p>
     <div class="toolbar"><form method="post" action="/console/run-demo"><button type="submit">Run Demo</button></form></div>
   </div>
-  {_console_command_panel('llm-platform classify --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --session-id demo')}
+  {_console_command_panel('blacklight classify --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --session-id demo')}
 </section>"""
     return _console_shell(active="workflows", title="Workflows", body=body)
 
@@ -779,7 +779,7 @@ def _render_console_runs() -> HTMLResponse:
   <td data-label="Session"><a href="/sessions/{escape(item['session_id'])}">{escape(item['session_id'])}</a></td>
   <td data-label="Requests">{item["request_count"]}</td>
   <td data-label="Latest">{escape(item["latest"])}</td>
-  <td data-label="CLI">{_cli_command(f"llm-platform session show {item['session_id']} --trace-db-path {settings.trace_db_path}")}</td>
+  <td data-label="CLI">{_cli_command(f"blacklight session show {item['session_id']} --trace-db-path {settings.trace_db_path}")}</td>
 </tr>"""
         for item in sessions.values()
     )
@@ -802,7 +802,7 @@ def _render_console_traces() -> HTMLResponse:
     body = f"""
 <h1>Traces</h1>
 <p class="muted">Recent provider calls and validation outcomes.</p>
-<section class="grid">{_console_command_panel("llm-platform trace list --trace-db-path traces.sqlite3 --limit 10")}</section>
+<section class="grid">{_console_command_panel("blacklight trace list --trace-db-path traces.sqlite3 --limit 10")}</section>
 <table>
   <thead><tr><th>Time</th><th>Request</th><th>Session</th><th>Status</th><th>Inspect</th></tr></thead>
   <tbody>{rows}</tbody>
@@ -818,8 +818,8 @@ def _render_console_evals() -> HTMLResponse:
 <h1>Evals</h1>
 <p class="muted">Persisted regression reports.</p>
 <section class="grid">
-  {_console_command_panel("llm-platform eval run --trace-db-path traces.sqlite3 --session-id eval-demo")}
-  {_console_command_panel("llm-platform eval list --trace-db-path traces.sqlite3")}
+  {_console_command_panel("blacklight eval run --trace-db-path traces.sqlite3 --session-id eval-demo")}
+  {_console_command_panel("blacklight eval list --trace-db-path traces.sqlite3")}
 </section>
 <table>
   <thead><tr><th>Run</th><th>Session</th><th>Prompt</th><th>Accuracy</th><th>Inspect</th></tr></thead>
@@ -836,14 +836,14 @@ def _render_console_prompts() -> HTMLResponse:
   <td data-label="Version">{prompt.version}</td>
   <td data-label="Schema">{escape(prompt.output_schema)}</td>
   <td data-label="Group">{escape(prompt.comparison_group)}</td>
-  <td data-label="CLI">{_cli_command(f"llm-platform prompts show {prompt.prompt_id}")}</td>
+  <td data-label="CLI">{_cli_command(f"blacklight prompts show {prompt.prompt_id}")}</td>
 </tr>"""
         for prompt in prompts
     )
     body = f"""
 <h1>Prompts</h1>
 <p class="muted">Prompt registry metadata.</p>
-<section class="grid">{_console_command_panel("llm-platform prompts list")}</section>
+<section class="grid">{_console_command_panel("blacklight prompts list")}</section>
 <table>
   <thead><tr><th>Prompt</th><th>Version</th><th>Schema</th><th>Group</th><th>CLI</th></tr></thead>
   <tbody>{rows}</tbody>
@@ -860,7 +860,7 @@ def _render_console_providers() -> HTMLResponse:
   <div class="panel"><h2>Model</h2><div class="metric">{escape(settings.model)}</div></div>
   <div class="panel"><h2>OpenAI Key</h2><div class="metric">{escape(str(bool(settings.openai_api_key)))}</div></div>
   <div class="panel"><h2>Custom Provider</h2><div class="metric">{escape(str(bool(settings.custom_provider_path)))}</div></div>
-  {_console_command_panel("llm-platform health")}
+  {_console_command_panel("blacklight health")}
 </section>"""
     return _console_shell(active="providers", title="Providers", body=body)
 
@@ -876,7 +876,7 @@ def _render_console_review() -> HTMLResponse:
   <div class="panel"><h2>Pending</h2><div class="metric">{payload["summary"]["pending_count"]}</div></div>
   <div class="panel"><h2>Approved</h2><div class="metric">{payload["summary"]["approved_count"]}</div></div>
   <div class="panel"><h2>Queue</h2><p><a href="/reviews">Open review queue</a></p></div>
-  {_console_command_panel("llm-platform trace list --trace-db-path traces.sqlite3 --limit 10")}
+  {_console_command_panel("blacklight trace list --trace-db-path traces.sqlite3 --limit 10")}
 </section>"""
     return _console_shell(active="review", title="Review Queue", body=body)
 
@@ -890,7 +890,7 @@ def _render_console_settings() -> HTMLResponse:
   <div class="panel"><h2>Timeout</h2><div class="metric">{settings.provider_timeout_seconds}</div></div>
   <div class="panel"><h2>Retries</h2><div class="metric">{settings.provider_max_retries}</div></div>
   <div class="panel"><h2>Rate Limit</h2><p>{settings.provider_rate_limit_requests} / {settings.provider_rate_limit_window_seconds}s</p></div>
-  {_console_command_panel("llm-platform health")}
+  {_console_command_panel("blacklight health")}
 </section>"""
     return _console_shell(active="settings", title="Settings", body=body)
 
@@ -938,7 +938,7 @@ def _render_session_history(payload: dict[str, Any], *, limit: int) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Session {session_id} - LLM Platform Starter</title>
+  <title>Session {session_id} - Blacklight Studio</title>
   <style>
     body {{ margin: 0; font-family: Arial, sans-serif; color: #1f2933; background: #f7f9fb; }}
     main {{ max-width: 1180px; margin: 0 auto; padding: 28px 20px 40px; }}
@@ -1029,7 +1029,7 @@ def _render_review_page(session_id: str, trace: dict[str, Any]) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Review {escape(trace["request_id"])} - LLM Platform Starter</title>
+  <title>Review {escape(trace["request_id"])} - Blacklight Studio</title>
   <style>
     body {{ margin: 0; font-family: Arial, sans-serif; color: #1f2933; background: #f7f9fb; }}
     main {{ max-width: 900px; margin: 0 auto; padding: 28px 20px 40px; }}
@@ -1061,7 +1061,7 @@ def _render_review_queue(payload: dict[str, Any], *, include_decided: bool, limi
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Business Review Queue - LLM Platform Starter</title>
+  <title>Business Review Queue - Blacklight Studio</title>
   <style>
     body {{ margin: 0; font-family: Arial, sans-serif; color: #1f2933; background: #f7f9fb; }}
     main {{ max-width: 1280px; margin: 0 auto; padding: 28px 20px 40px; }}
@@ -1271,7 +1271,7 @@ def console_workflows_json() -> dict[str, Any]:
     payload = {
         "workflows": [_workflow_payload()],
     }
-    payload.update(_cli_affordance("llm-platform demo --verbose", list="llm-platform demo --verbose"))
+    payload.update(_cli_affordance("blacklight demo --verbose", list="blacklight demo --verbose"))
     return payload
 
 
@@ -1314,7 +1314,7 @@ def console_workflow_run_json(
     traces = trace_store.list_by_session_id(run_request.session_id, limit=500)
     trace = traces[-1]
     equivalent_run = (
-        f"llm-platform classify --subject {_quote_cli_arg(run_request.subject)} "
+        f"blacklight classify --subject {_quote_cli_arg(run_request.subject)} "
         f"--body {_quote_cli_arg(run_request.body)} "
         f"--session-id {_quote_cli_arg(run_request.session_id)} "
         f"{_trace_db_arg()}"
@@ -1330,8 +1330,8 @@ def console_workflow_run_json(
         _cli_affordance(
             equivalent_run,
             equivalent_run=equivalent_run,
-            trace=f"llm-platform trace show {trace['request_id']} {_trace_db_arg()}",
-            session=f"llm-platform session show {run_request.session_id} {_trace_db_arg()}",
+            trace=f"blacklight trace show {trace['request_id']} {_trace_db_arg()}",
+            session=f"blacklight session show {run_request.session_id} {_trace_db_arg()}",
         )
     )
     return payload
@@ -1344,8 +1344,8 @@ def console_runs_json(limit: int = Query(default=50, ge=1, le=500)) -> dict[str,
     }
     payload.update(
         _cli_affordance(
-            f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
-            list=f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+            f"blacklight trace list {_trace_db_arg()} --limit {limit}",
+            list=f"blacklight trace list {_trace_db_arg()} --limit {limit}",
         )
     )
     return payload
@@ -1364,9 +1364,9 @@ def console_run_json(
     }
     payload.update(
         _cli_affordance(
-            f"llm-platform session show {session_id} {_trace_db_arg()} --limit {limit}",
-            show=f"llm-platform session show {session_id} {_trace_db_arg()} --limit {limit}",
-            traces=f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+            f"blacklight session show {session_id} {_trace_db_arg()} --limit {limit}",
+            show=f"blacklight session show {session_id} {_trace_db_arg()} --limit {limit}",
+            traces=f"blacklight trace list {_trace_db_arg()} --limit {limit}",
         )
     )
     return payload
@@ -1379,8 +1379,8 @@ def console_traces_json(limit: int = Query(default=25, ge=1, le=500)) -> dict[st
     }
     payload.update(
         _cli_affordance(
-            f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
-            list=f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+            f"blacklight trace list {_trace_db_arg()} --limit {limit}",
+            list=f"blacklight trace list {_trace_db_arg()} --limit {limit}",
         )
     )
     return payload
@@ -1407,9 +1407,9 @@ def console_evals_json(limit: int = Query(default=25, ge=1, le=500)) -> dict[str
     }
     payload.update(
         _cli_affordance(
-            f"llm-platform eval list {_trace_db_arg()}",
-            run=f"llm-platform eval run {_trace_db_arg()} --session-id console-api-eval",
-            list=f"llm-platform eval list {_trace_db_arg()}",
+            f"blacklight eval list {_trace_db_arg()}",
+            run=f"blacklight eval run {_trace_db_arg()} --session-id console-api-eval",
+            list=f"blacklight eval list {_trace_db_arg()}",
         )
     )
     return payload
@@ -1436,12 +1436,12 @@ def console_eval_run_json(eval_request: ConsoleEvalRunRequest | None = None) -> 
             for trace in trace_store.list_by_eval_run_id(report["eval_run_id"])
         ],
     }
-    run_command = f"llm-platform eval run {_trace_db_arg()} --session-id {eval_request.session_id}"
+    run_command = f"blacklight eval run {_trace_db_arg()} --session-id {eval_request.session_id}"
     payload.update(
         _cli_affordance(
             run_command,
             run=run_command,
-            show=f"llm-platform eval show {report['eval_run_id']} {_trace_db_arg()}",
+            show=f"blacklight eval show {report['eval_run_id']} {_trace_db_arg()}",
         )
     )
     return payload
@@ -1472,9 +1472,9 @@ def console_prompts_json() -> dict[str, Any]:
     }
     payload.update(
         _cli_affordance(
-            "llm-platform prompts list",
-            list="llm-platform prompts list",
-            compare="llm-platform eval compare --baseline-version 1 --candidate-version 2",
+            "blacklight prompts list",
+            list="blacklight prompts list",
+            compare="blacklight eval compare --baseline-version 1 --candidate-version 2",
         )
     )
     return payload
@@ -1500,7 +1500,7 @@ def console_providers_json() -> dict[str, Any]:
         "providers": [_provider_payload(provider) for provider in ["mock", "openai", "custom"]],
         "active_provider": settings.provider,
     }
-    payload.update(_cli_affordance("llm-platform health", health="llm-platform health"))
+    payload.update(_cli_affordance("blacklight health", health="blacklight health"))
     return payload
 
 
@@ -1519,7 +1519,7 @@ def console_provider_test_json(provider_name: str) -> dict[str, Any]:
             ),
         },
     }
-    payload.update(_cli_affordance("llm-platform health", health="llm-platform health"))
+    payload.update(_cli_affordance("blacklight health", health="blacklight health"))
     return payload
 
 
@@ -1534,8 +1534,8 @@ def console_reviews_json(
     }
     payload.update(
         _cli_affordance(
-            f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
-            traces=f"llm-platform trace list {_trace_db_arg()} --limit {limit}",
+            f"blacklight trace list {_trace_db_arg()} --limit {limit}",
+            traces=f"blacklight trace list {_trace_db_arg()} --limit {limit}",
         )
     )
     return payload
@@ -1558,7 +1558,7 @@ def console_settings_update_json(request: ConsoleSettingsUpdateRequest) -> dict[
         "updated_keys": sorted(request.settings),
         "settings": _settings_payload(),
     }
-    payload.update(_cli_affordance("llm-platform health", health="llm-platform health"))
+    payload.update(_cli_affordance("blacklight health", health="blacklight health"))
     return payload
 
 

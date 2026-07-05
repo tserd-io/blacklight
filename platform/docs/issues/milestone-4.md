@@ -1,6 +1,6 @@
 # Milestone 4 Issue Tickets: CLI-Ready Package And Release
 
-Milestone 4 prepares the project as a CLI-ready, developer-operable package. The goal is that a technical user can install it, run `llm-platform`, configure providers, inspect traces and evals, and understand the operating cost/risk profile without needing a frontend.
+Milestone 4 prepares the project as a CLI-ready, developer-operable package. The goal is that a technical user can install it, run `blacklight`, configure providers, inspect traces and evals, and understand the operating cost/risk profile without needing a frontend.
 
 Business-user frontend work is intentionally deferred to Milestone 5 so the release does not blur CLI/package readiness with desktop-product scope.
 
@@ -177,7 +177,7 @@ Make the CLI-ready package easier to operate by letting users inspect what happe
 
 Tasks:
 
-- Add a command such as `llm-platform session show <session_id>`.
+- Add a command such as `blacklight session show <session_id>`.
 - List traces for the session in chronological order.
 - Include provider, model, prompt version, latency, tokens, cost, guardrail outcome, validation status, and error category.
 - Include a session summary with request count, total tokens, total estimated cost, failure rate, review count, and provider/model breakdown.
@@ -207,7 +207,7 @@ Tasks:
 - Add a Docker Compose configuration for running Ollama locally.
 - Add or document a bundled Ollama provider adapter that uses the existing `custom` provider path.
 - Document how to pull a local model such as `llama3.1`.
-- Document the environment variables needed to point `llm-platform` at the local Ollama endpoint.
+- Document the environment variables needed to point `blacklight` at the local Ollama endpoint.
 - Keep `mock` as the default provider for quickstart and CI.
 - Add opt-in smoke-test guidance for a real Ollama runtime.
 - Clarify that model weights and runtime downloads are local developer artifacts, not files committed to the repo.

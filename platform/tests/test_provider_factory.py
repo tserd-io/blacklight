@@ -1,11 +1,11 @@
 import pytest
 
-from llm_platform_starter.examples.ticket_classifier import TicketClassifier
-from llm_platform_starter.models import ProviderRequest, ProviderResponse, TicketRequest
-from llm_platform_starter.providers.base import LLMProvider
-from llm_platform_starter.providers.factory import ProviderConfigurationError, create_provider
-from llm_platform_starter.providers.mock import MockProvider
-from llm_platform_starter.settings import Settings, load_settings
+from blacklight.examples.ticket_classifier import TicketClassifier
+from blacklight.models import ProviderRequest, ProviderResponse, TicketRequest
+from blacklight.providers.base import LLMProvider
+from blacklight.providers.factory import ProviderConfigurationError, create_provider
+from blacklight.providers.mock import MockProvider
+from blacklight.settings import Settings, load_settings
 
 
 def test_provider_factory_creates_mock_provider_by_default():
@@ -28,8 +28,8 @@ def test_provider_factory_creates_custom_provider_from_import_path(tmp_path, mon
     provider_module = tmp_path / "custom_provider.py"
     provider_module.write_text(
         """
-from llm_platform_starter.models import ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class CustomProvider(LLMProvider):
@@ -54,8 +54,8 @@ def test_provider_factory_creates_custom_provider_from_factory(tmp_path, monkeyp
     provider_module = tmp_path / "custom_factory.py"
     provider_module.write_text(
         """
-from llm_platform_starter.models import ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class CustomProvider(LLMProvider):
@@ -85,8 +85,8 @@ def test_provider_factory_creates_custom_provider_from_instance(tmp_path, monkey
     provider_module = tmp_path / "custom_instance.py"
     provider_module.write_text(
         """
-from llm_platform_starter.models import ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class CustomProvider(LLMProvider):
@@ -147,8 +147,8 @@ def test_provider_factory_loads_custom_provider_from_environment(tmp_path, monke
     provider_module = tmp_path / "env_provider.py"
     provider_module.write_text(
         """
-from llm_platform_starter.models import ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class EnvProvider(LLMProvider):
@@ -174,8 +174,8 @@ def test_ticket_classifier_uses_custom_provider_loaded_from_factory(tmp_path, mo
         """
 import json
 
-from llm_platform_starter.models import ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class ClassifierProvider(LLMProvider):

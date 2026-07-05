@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-platform-starter"
+name = "blacklight"
 version = "0.1.0"
-description = "Minimal shared AI platform starter for provider routing, prompt versioning, evals, guardrails, and observability."
+description = "Blacklight Studio platform package for provider routing, prompt versioning, evals, guardrails, and observability."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -27,13 +27,13 @@ dev = [
 ]
 
 [project.scripts]
-llm-platform = "llm_platform_starter.cli:main"
+blacklight = "blacklight.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-llm_platform_starter = [
+blacklight = [
   "prompts/templates/*.json",
   "evals/fixtures/*.jsonl",
 ]

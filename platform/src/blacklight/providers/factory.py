@@ -4,9 +4,9 @@ from importlib import import_module
 from inspect import isclass
 from typing import Any
 
-from llm_platform_starter.providers.base import LLMProvider
-from llm_platform_starter.providers.mock import MockProvider
-from llm_platform_starter.settings import Settings, load_settings
+from blacklight.providers.base import LLMProvider
+from blacklight.providers.mock import MockProvider
+from blacklight.settings import Settings, load_settings
 
 
 class ProviderConfigurationError(ValueError):
@@ -25,7 +25,7 @@ def create_provider(settings: Settings | None = None) -> LLMProvider:
             raise ProviderConfigurationError(
                 "OPENAI_API_KEY is required when LLM_PROVIDER is set to openai."
             )
-        from llm_platform_starter.providers.openai_provider import OpenAIProvider
+        from blacklight.providers.openai_provider import OpenAIProvider
 
         return OpenAIProvider(api_key=resolved_settings.openai_api_key)
 

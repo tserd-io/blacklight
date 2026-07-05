@@ -1,6 +1,6 @@
 ![Blacklight Studio logo](platform/docs/assets/blacklight-studio-readme-logo.png)
 
-# Blacklight Studio: Your LLM Platform Starter
+# Blacklight Studio
 
 Blacklight Studio is a compact internal AI workflow studio that shows how teams can route model calls through shared provider, prompt, eval, guardrail, and observability layers instead of scattering one-off prompts across applications.
 
@@ -37,5 +37,5 @@ Start here for the full project:
 ```bash
 cd platform
 pip install -e ".[dev,api]"
-llm-platform demo --verbose
+blacklight demo --verbose
 ```

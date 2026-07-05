@@ -7,27 +7,27 @@ import sys
 import uuid
 from typing import Any
 
-from llm_platform_starter.demo_seed import seed_demo_data
-from llm_platform_starter.errors import (
+from blacklight.demo_seed import seed_demo_data
+from blacklight.errors import (
     describe_exception,
     is_known_error,
     session_not_found_error,
     trace_not_found_error,
 )
-from llm_platform_starter.evals.runner import (
+from blacklight.evals.runner import (
     compare_ticket_classification_prompt_versions,
     run_ticket_classification_eval,
 )
-from llm_platform_starter.examples.ticket_classifier import TicketClassifier
-from llm_platform_starter.models import TicketRequest
-from llm_platform_starter.observability.evaluations import EvalMetricStore
-from llm_platform_starter.observability.idempotency import IdempotencyStore
-from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.prompts.registry import PromptRegistry
-from llm_platform_starter.providers.factory import create_provider
-from llm_platform_starter.providers.mock import MockProvider
-from llm_platform_starter.session_history import summarize_session, trace_detail
-from llm_platform_starter.settings import load_settings
+from blacklight.examples.ticket_classifier import TicketClassifier
+from blacklight.models import TicketRequest
+from blacklight.observability.evaluations import EvalMetricStore
+from blacklight.observability.idempotency import IdempotencyStore
+from blacklight.observability.storage import TraceStore
+from blacklight.prompts.registry import PromptRegistry
+from blacklight.providers.factory import create_provider
+from blacklight.providers.mock import MockProvider
+from blacklight.session_history import summarize_session, trace_detail
+from blacklight.settings import load_settings
 
 DEMO_SUBJECT = "Refund request"
 DEMO_BODY = "Customer asks for a refund after duplicate billing."
@@ -80,7 +80,7 @@ def demo(args: argparse.Namespace) -> int:
     detail = trace_detail(trace)
     trace_command = _command_string(
         [
-            "llm-platform",
+            "blacklight",
             "trace",
             "show",
             trace["request_id"],
@@ -90,7 +90,7 @@ def demo(args: argparse.Namespace) -> int:
     )
     session_command = _command_string(
         [
-            "llm-platform",
+            "blacklight",
             "session",
             "show",
             session_id,
@@ -100,7 +100,7 @@ def demo(args: argparse.Namespace) -> int:
     )
     eval_command = _command_string(
         [
-            "llm-platform",
+            "blacklight",
             "eval",
             "run",
             "--trace-db-path",
@@ -111,7 +111,7 @@ def demo(args: argparse.Namespace) -> int:
     )
     equivalent_workflow_command = _command_string(
         [
-            "llm-platform",
+            "blacklight",
             "classify",
             "--subject",
             DEMO_SUBJECT,
@@ -348,8 +348,8 @@ def seed_demo(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="llm-platform",
-        description="Run the LLM platform starter demo workflows.",
+        prog="blacklight",
+        description="Run the Blacklight Studio demo workflows.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -563,7 +563,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except Exception as exc:
-        if not is_known_error(exc) and os.getenv("LLM_PLATFORM_DEBUG_ERRORS") == "1":
+        if not is_known_error(exc) and os.getenv("BLACKLIGHT_DEBUG_ERRORS") == "1":
             raise
         _print_error(describe_exception(exc).as_payload())
         return 1

@@ -7,8 +7,8 @@ import time
 import uuid
 from collections.abc import Callable
 
-from llm_platform_starter.models import ProviderRequest, ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderRequest, ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 IDEMPOTENCY_KEY_METADATA = "idempotency_key"
 

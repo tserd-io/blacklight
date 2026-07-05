@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from llm_platform_starter.observability.idempotency import IdempotencyInProgressError
-from llm_platform_starter.providers.factory import ProviderConfigurationError
-from llm_platform_starter.providers.reliability import ProviderCallError
+from blacklight.observability.idempotency import IdempotencyInProgressError
+from blacklight.providers.factory import ProviderConfigurationError
+from blacklight.providers.reliability import ProviderCallError
 
 
 class GuardrailValidationError(ValueError):
@@ -35,7 +35,7 @@ def trace_not_found_error(trace_id: str) -> ErrorDetail:
         category="trace_not_found",
         message=f"Trace not found: {trace_id}",
         likely_cause="No trace record exists for that request id in the selected SQLite database.",
-        next_step="Run `llm-platform trace list` with the same --trace-db-path and retry with a listed request_id.",
+        next_step="Run `blacklight trace list` with the same --trace-db-path and retry with a listed request_id.",
     )
 
 
@@ -44,7 +44,7 @@ def session_not_found_error(session_id: str) -> ErrorDetail:
         category="session_not_found",
         message=f"Session not found: {session_id}",
         likely_cause="No trace records exist for that session id in the selected SQLite database.",
-        next_step="Run `llm-platform trace list` with the same --trace-db-path and retry with a listed session_id.",
+        next_step="Run `blacklight trace list` with the same --trace-db-path and retry with a listed session_id.",
     )
 
 
@@ -54,7 +54,7 @@ def describe_exception(exc: Exception) -> ErrorDetail:
             category="configuration_error",
             message=str(exc),
             likely_cause="Provider settings are missing, malformed, or incompatible with the selected provider.",
-            next_step="Run `llm-platform health` and check LLM_PROVIDER, OPENAI_API_KEY, or LLM_CUSTOM_PROVIDER.",
+            next_step="Run `blacklight health` and check LLM_PROVIDER, OPENAI_API_KEY, or LLM_CUSTOM_PROVIDER.",
         )
     if isinstance(exc, ProviderCallError):
         return ErrorDetail(

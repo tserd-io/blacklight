@@ -1,8 +1,8 @@
 import json
 
-from llm_platform_starter.models import ProviderRequest
-from llm_platform_starter.providers.mock import MockProvider
-from llm_platform_starter.providers.ollama_provider import OllamaProvider
+from blacklight.models import ProviderRequest
+from blacklight.providers.mock import MockProvider
+from blacklight.providers.ollama_provider import OllamaProvider
 
 
 def test_mock_provider_returns_normalized_ticket_json():
@@ -49,7 +49,7 @@ def test_ollama_provider_normalizes_generate_response(monkeypatch):
         captured["body"] = json.loads(http_request.data.decode("utf-8"))
         return FakeHTTPResponse()
 
-    monkeypatch.setattr("llm_platform_starter.providers.ollama_provider.urlrequest.urlopen", fake_urlopen)
+    monkeypatch.setattr("blacklight.providers.ollama_provider.urlrequest.urlopen", fake_urlopen)
 
     response = OllamaProvider(base_url="http://localhost:11434/").complete(
         ProviderRequest(prompt="Classify this ticket.", model="llama3.1")

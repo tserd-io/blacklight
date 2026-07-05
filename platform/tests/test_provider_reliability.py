@@ -3,15 +3,15 @@ import time
 
 import pytest
 
-from llm_platform_starter.examples.ticket_classifier import TicketClassifier
-from llm_platform_starter.models import ProviderRequest, ProviderResponse, TicketRequest
-from llm_platform_starter.observability.idempotency import (
+from blacklight.examples.ticket_classifier import TicketClassifier
+from blacklight.models import ProviderRequest, ProviderResponse, TicketRequest
+from blacklight.observability.idempotency import (
     IdempotencyInProgressError,
     IdempotencyStore,
 )
-from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.providers.base import LLMProvider
-from llm_platform_starter.providers.reliability import (
+from blacklight.observability.storage import TraceStore
+from blacklight.providers.base import LLMProvider
+from blacklight.providers.reliability import (
     IDEMPOTENCY_KEY_METADATA,
     KeyedRateLimiter,
     ProviderCallError,

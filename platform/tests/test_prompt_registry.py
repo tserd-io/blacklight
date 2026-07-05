@@ -1,4 +1,4 @@
-from llm_platform_starter.prompts.registry import PromptRegistry
+from blacklight.prompts.registry import PromptRegistry
 
 
 def test_prompt_registry_loads_and_renders_active_prompt():

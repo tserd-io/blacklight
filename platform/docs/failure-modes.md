@@ -210,9 +210,9 @@ Production extension:
 Start from the surface that saw the failure:
 
 - CLI/API error: inspect `category`, `likely_cause`, and `next_step`.
-- One bad request: run `llm-platform trace show <request_id>`.
-- Pattern across requests: run `llm-platform metrics`.
-- Eval regression: run `llm-platform eval show <eval_run_id>`.
-- Prompt regression: run `llm-platform eval compare --baseline-version <n> --candidate-version <n>`.
+- One bad request: run `blacklight trace show <request_id>`.
+- Pattern across requests: run `blacklight metrics`.
+- Eval regression: run `blacklight eval show <eval_run_id>`.
+- Prompt regression: run `blacklight eval compare --baseline-version <n> --candidate-version <n>`.
 
 The intended diagnostic path is session to eval run to case to provider trace. That keeps the user from guessing whether a failure came from prompt wording, provider behavior, validation, guardrails, or operating limits.

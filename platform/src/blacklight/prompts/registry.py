@@ -72,7 +72,7 @@ class PromptRegistry:
         if self.template_dir:
             raw = (self.template_dir / filename).read_text(encoding="utf-8")
         else:
-            raw = resources.files("llm_platform_starter.prompts.templates").joinpath(
+            raw = resources.files("blacklight.prompts.templates").joinpath(
                 filename
             ).read_text(encoding="utf-8")
         payload = json.loads(raw)
@@ -82,5 +82,5 @@ class PromptRegistry:
         if self.template_dir:
             paths = self.template_dir.glob("*.json")
             return sorted(path.stem for path in paths)
-        template_root = resources.files("llm_platform_starter.prompts.templates")
+        template_root = resources.files("blacklight.prompts.templates")
         return sorted(path.name.removesuffix(".json") for path in template_root.iterdir())

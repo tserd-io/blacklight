@@ -4,8 +4,8 @@ import json
 
 from pydantic import ValidationError
 
-from llm_platform_starter.guardrails.pii import detect_pii
-from llm_platform_starter.models import GuardrailOutcome, TicketClassification, ValidationResult
+from blacklight.guardrails.pii import detect_pii
+from blacklight.models import GuardrailOutcome, TicketClassification, ValidationResult
 
 
 def parse_ticket_classification(text: str) -> TicketClassification:

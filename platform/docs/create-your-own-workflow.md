@@ -21,12 +21,12 @@ The reusable platform pieces are already present. A new workflow mainly supplies
 
 ## 1. Define The Workflow Contract
 
-Start with the shape of the input and output. Existing schemas live in [src/llm_platform_starter/models.py](../src/llm_platform_starter/models.py).
+Start with the shape of the input and output. Existing schemas live in [src/blacklight/models.py](../src/blacklight/models.py).
 
 For a new workflow, either add small shared models there or create a workflow-specific module such as:
 
 ```text
-src/llm_platform_starter/examples/document_triage.py
+src/blacklight/examples/document_triage.py
 ```
 
 For document intake triage, the request might include:
@@ -49,12 +49,12 @@ Keep fields narrow and typed. The validator can only protect downstream code if 
 
 ## 2. Add A Prompt Template
 
-Prompt templates live in [src/llm_platform_starter/prompts/templates/](../src/llm_platform_starter/prompts/templates). The ticket example is [ticket_classifier.json](../src/llm_platform_starter/prompts/templates/ticket_classifier.json).
+Prompt templates live in [src/blacklight/prompts/templates/](../src/blacklight/prompts/templates). The ticket example is [ticket_classifier.json](../src/blacklight/prompts/templates/ticket_classifier.json).
 
 Create a new file such as:
 
 ```text
-src/llm_platform_starter/prompts/templates/document_triage.json
+src/blacklight/prompts/templates/document_triage.json
 ```
 
 Use metadata to make the prompt easy to inspect and evaluate:
@@ -85,23 +85,23 @@ Keep fixture names, output schema names, and comparison groups aligned. That let
 
 ## 3. Build The Workflow Path
 
-Use [src/llm_platform_starter/examples/ticket_classifier.py](../src/llm_platform_starter/examples/ticket_classifier.py) as the working pattern.
+Use [src/blacklight/examples/ticket_classifier.py](../src/blacklight/examples/ticket_classifier.py) as the working pattern.
 
 A workflow should:
 
 1. Load the prompt with `PromptRegistry().get("document_triage")`.
 2. Render it with request fields.
 3. Build a `ProviderRequest` with `prompt`, `model`, and metadata such as `request_id`, `session_id`, and `prompt_id`.
-4. Call `complete_with_retries()` from [src/llm_platform_starter/providers/reliability.py](../src/llm_platform_starter/providers/reliability.py).
+4. Call `complete_with_retries()` from [src/blacklight/providers/reliability.py](../src/blacklight/providers/reliability.py).
 5. Validate the provider text with a guardrail function.
-6. Write a `TraceRecord` through `TraceStore` from [src/llm_platform_starter/observability/storage.py](../src/llm_platform_starter/observability/storage.py).
+6. Write a `TraceRecord` through `TraceStore` from [src/blacklight/observability/storage.py](../src/blacklight/observability/storage.py).
 7. Return the typed response object.
 
-If the workflow can be retried by a caller, follow the idempotency pattern in `TicketClassifier`: derive a stable key from the workflow name, prompt version, and input content, then use [src/llm_platform_starter/observability/idempotency.py](../src/llm_platform_starter/observability/idempotency.py).
+If the workflow can be retried by a caller, follow the idempotency pattern in `TicketClassifier`: derive a stable key from the workflow name, prompt version, and input content, then use [src/blacklight/observability/idempotency.py](../src/blacklight/observability/idempotency.py).
 
 ## 4. Add Validation And Guardrails
 
-Validation functions live in [src/llm_platform_starter/guardrails/](../src/llm_platform_starter/guardrails). The ticket workflow uses [validation.py](../src/llm_platform_starter/guardrails/validation.py).
+Validation functions live in [src/blacklight/guardrails/](../src/blacklight/guardrails). The ticket workflow uses [validation.py](../src/blacklight/guardrails/validation.py).
 
 For a new workflow, create a parser that:
 
@@ -115,12 +115,12 @@ Keep public-safe checks simple at first. For example, a document triage workflow
 
 ## 5. Add Synthetic Eval Fixtures
 
-Eval fixtures live in [src/llm_platform_starter/evals/fixtures/](../src/llm_platform_starter/evals/fixtures). The ticket fixture is `ticket_classification.jsonl`.
+Eval fixtures live in [src/blacklight/evals/fixtures/](../src/blacklight/evals/fixtures). The ticket fixture is `ticket_classification.jsonl`.
 
 For document triage, add:
 
 ```text
-src/llm_platform_starter/evals/fixtures/document_triage.jsonl
+src/blacklight/evals/fixtures/document_triage.jsonl
 ```
 
 Each line should be a small public-safe JSON object:
@@ -133,7 +133,7 @@ Do not use real names, real addresses, real customers, real vendors, real contra
 
 ## 6. Add An Eval Runner
 
-The existing eval runner is [src/llm_platform_starter/evals/runner.py](../src/llm_platform_starter/evals/runner.py). For a second workflow, you can either:
+The existing eval runner is [src/blacklight/evals/runner.py](../src/blacklight/evals/runner.py). For a second workflow, you can either:
 
 - add a workflow-specific function such as `run_document_triage_eval()`
 - or extract shared eval helpers once two workflows reveal real duplication
@@ -174,12 +174,12 @@ At minimum, add tests that prove:
 
 ## 8. Decide Whether To Expose CLI Or API
 
-The existing CLI is [src/llm_platform_starter/cli.py](../src/llm_platform_starter/cli.py). The existing API is [src/llm_platform_starter/api.py](../src/llm_platform_starter/api.py).
+The existing CLI is [src/blacklight/cli.py](../src/blacklight/cli.py). The existing API is [src/blacklight/api.py](../src/blacklight/api.py).
 
 Add a CLI command when the workflow should be easy to demo or run in CI. For example:
 
 ```bash
-llm-platform document-triage --title "Synthetic invoice received" --body "A fictional supplier sent a materials invoice."
+blacklight document-triage --title "Synthetic invoice received" --body "A fictional supplier sent a materials invoice."
 ```
 
 Add an API route when the workflow should be callable by an application. Keep request and response models typed, and reuse the same workflow class used by the CLI.

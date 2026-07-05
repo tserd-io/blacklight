@@ -2,11 +2,11 @@
 
 ## v0.1.0 - CLI-Ready MVP
 
-This release prepares `llm-platform-starter` as a CLI-ready, developer-operable portfolio project. It demonstrates the shared platform layer around an LLM workflow without requiring live provider credentials, private data, or a frontend.
+This release prepares `blacklight` as a CLI-ready, developer-operable portfolio project. It demonstrates the shared platform layer around an LLM workflow without requiring live provider credentials, private data, or a frontend.
 
 ### Included
 
-- `llm-platform` CLI entry point for health checks, classification, evals, metrics, prompts, traces, and session history
+- `blacklight` CLI entry point for health checks, classification, evals, metrics, prompts, traces, and session history
 - FastAPI service for the ticket-classification workflow
 - deterministic mock provider for local development, CI, and public-safe demos
 - optional OpenAI provider and custom provider import path for real provider experiments
@@ -34,15 +34,15 @@ The release branch should pass:
 pip install -e ".[dev,api]"
 ruff check .
 pytest
-llm-platform health
-llm-platform eval run --trace-db-path traces.sqlite3 --session-id release-smoke
+blacklight health
+blacklight eval run --trace-db-path traces.sqlite3 --session-id release-smoke
 ```
 
 Docker smoke testing is supported when Docker is available:
 
 ```bash
-docker build -t llm-platform-starter .
-docker run --rm -p 8000:8000 llm-platform-starter
+docker build -t blacklight .
+docker run --rm -p 8000:8000 blacklight
 curl http://127.0.0.1:8000/health
 ```
 
@@ -67,11 +67,11 @@ Passed checks:
 
 - `ruff check .`
 - `pytest`
-- `llm-platform health`
-- `llm-platform classify --trace-db-path .tmp\milestone4-final-qa.sqlite3 --session-id m4-final-cli`
-- `llm-platform eval run --trace-db-path .tmp\milestone4-final-qa.sqlite3 --session-id m4-final-eval`
-- `llm-platform metrics --trace-db-path .tmp\milestone4-final-qa.sqlite3`
-- `llm-platform session show m4-final-cli --trace-db-path .tmp\milestone4-final-qa.sqlite3`
+- `blacklight health`
+- `blacklight classify --trace-db-path .tmp\milestone4-final-qa.sqlite3 --session-id m4-final-cli`
+- `blacklight eval run --trace-db-path .tmp\milestone4-final-qa.sqlite3 --session-id m4-final-eval`
+- `blacklight metrics --trace-db-path .tmp\milestone4-final-qa.sqlite3`
+- `blacklight session show m4-final-cli --trace-db-path .tmp\milestone4-final-qa.sqlite3`
 - FastAPI `/health` smoke check
 - FastAPI `/classify-ticket` smoke check
 - internal Markdown link scan
@@ -95,13 +95,13 @@ Passed checks:
 
 - `ruff check .`
 - `pytest`
-- `llm-platform health`
-- `llm-platform seed demo-data --trace-db-path .tmp\milestone5-final-qa.sqlite3`
-- `llm-platform demo --verbose --trace-db-path .tmp\milestone5-final-qa.sqlite3 --session-id m5-final-demo`
-- `llm-platform session show m5-final-demo --trace-db-path .tmp\milestone5-final-qa.sqlite3`
-- `llm-platform trace show seed-demo:billing-success --trace-db-path .tmp\milestone5-final-qa.sqlite3`
-- `llm-platform eval show seed-demo-eval --trace-db-path .tmp\milestone5-final-qa.sqlite3`
-- `llm-platform prompts show ticket_classifier`
+- `blacklight health`
+- `blacklight seed demo-data --trace-db-path .tmp\milestone5-final-qa.sqlite3`
+- `blacklight demo --verbose --trace-db-path .tmp\milestone5-final-qa.sqlite3 --session-id m5-final-demo`
+- `blacklight session show m5-final-demo --trace-db-path .tmp\milestone5-final-qa.sqlite3`
+- `blacklight trace show seed-demo:billing-success --trace-db-path .tmp\milestone5-final-qa.sqlite3`
+- `blacklight eval show seed-demo-eval --trace-db-path .tmp\milestone5-final-qa.sqlite3`
+- `blacklight prompts show ticket_classifier`
 - focused console API tests for dashboard state, workflow run, console surfaces, and CLI affordances
 - `git diff --check`
 
@@ -110,7 +110,7 @@ Confirmed behavior:
 - First-run guided demo works in mock mode.
 - Seeded demo state creates linked workflow runs, traces, eval cases, and prompt versions.
 - Dashboard, workflow, run, trace, eval, prompt, provider, review queue, and settings API payloads expose copy-friendly CLI equivalents.
-- No live provider key is required for the default console/demo path; `llm-platform health` reported `provider=mock`, `openai_configured=false`, and `custom_provider_configured=false`.
+- No live provider key is required for the default console/demo path; `blacklight health` reported `provider=mock`, `openai_configured=false`, and `custom_provider_configured=false`.
 
 Documented limitation:
 

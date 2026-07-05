@@ -4,14 +4,14 @@ from typing import Any
 
 from collections.abc import Callable
 
-from llm_platform_starter.evals.runner import run_ticket_classification_eval
-from llm_platform_starter.guardrails.validation import validate_ticket_output
-from llm_platform_starter.models import ProviderRequest, TraceRecord
-from llm_platform_starter.observability.cost import estimate_cost
-from llm_platform_starter.observability.evaluations import EvalMetricStore
-from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.prompts.registry import PromptRegistry, PromptTemplate
-from llm_platform_starter.providers.mock import MockProvider
+from blacklight.evals.runner import run_ticket_classification_eval
+from blacklight.guardrails.validation import validate_ticket_output
+from blacklight.models import ProviderRequest, TraceRecord
+from blacklight.observability.cost import estimate_cost
+from blacklight.observability.evaluations import EvalMetricStore
+from blacklight.observability.storage import TraceStore
+from blacklight.prompts.registry import PromptRegistry, PromptTemplate
+from blacklight.providers.mock import MockProvider
 
 DEMO_SEED_SESSION_ID = "seed-demo"
 DEMO_SEED_EVAL_RUN_ID = "seed-demo-eval"
@@ -79,9 +79,9 @@ def seed_demo_data(db_path: str) -> dict[str, Any]:
         },
         "prompt_versions": prompt_versions,
         "inspect_commands": {
-            "session": f"llm-platform session show {DEMO_SEED_SESSION_ID} --trace-db-path {db_path}",
-            "eval": f"llm-platform eval show {DEMO_SEED_EVAL_RUN_ID} --trace-db-path {db_path}",
-            "traces": f"llm-platform trace list --trace-db-path {db_path} --limit 10",
+            "session": f"blacklight session show {DEMO_SEED_SESSION_ID} --trace-db-path {db_path}",
+            "eval": f"blacklight eval show {DEMO_SEED_EVAL_RUN_ID} --trace-db-path {db_path}",
+            "traces": f"blacklight trace list --trace-db-path {db_path} --limit 10",
         },
     }
 

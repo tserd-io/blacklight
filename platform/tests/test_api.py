@@ -4,16 +4,16 @@ from dataclasses import replace
 
 from fastapi.testclient import TestClient
 
-from llm_platform_starter import api
-from llm_platform_starter.cli import build_parser
-from llm_platform_starter.demo_seed import seed_demo_data
-from llm_platform_starter.errors import GuardrailValidationError
-from llm_platform_starter.models import GuardrailOutcome, TraceRecord
-from llm_platform_starter.observability.evaluations import EvalMetricStore
-from llm_platform_starter.observability.reviews import ReviewDecisionStore
-from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.providers.factory import ProviderConfigurationError
-from llm_platform_starter.providers.reliability import ProviderCallError
+from blacklight import api
+from blacklight.cli import build_parser
+from blacklight.demo_seed import seed_demo_data
+from blacklight.errors import GuardrailValidationError
+from blacklight.models import GuardrailOutcome, TraceRecord
+from blacklight.observability.evaluations import EvalMetricStore
+from blacklight.observability.reviews import ReviewDecisionStore
+from blacklight.observability.storage import TraceStore
+from blacklight.providers.factory import ProviderConfigurationError
+from blacklight.providers.reliability import ProviderCallError
 
 
 class ValidationFailureClassifier:
@@ -31,7 +31,7 @@ class ProviderFailureClassifier:
 
 
 def _assert_cli_command_parseable(command: str) -> None:
-    assert command.startswith("llm-platform ")
+    assert command.startswith("blacklight ")
     assert "<" not in command
     assert ">" not in command
     build_parser().parse_args(shlex.split(command)[1:])
@@ -191,22 +191,22 @@ def test_console_dashboard_exposes_demo_and_recent_inspection_links(monkeypatch,
     assert "/console/review" in response.text
     assert "seed-demo:billing-success" in response.text
     assert "seed-demo-eval" in response.text
-    assert "llm-platform demo --verbose" in response.text
-    assert "llm-platform seed demo-data" in response.text
+    assert "blacklight demo --verbose" in response.text
+    assert "blacklight seed demo-data" in response.text
 
 
 def test_console_surfaces_render_navigation_and_cli_equivalents(monkeypatch, tmp_path):
     _patch_seeded_console_stores(monkeypatch, tmp_path)
     client = TestClient(api.app)
     expected = {
-        "/console/workflows": "llm-platform classify",
-        "/console/runs": "llm-platform session show",
-        "/console/traces": "llm-platform trace list",
-        "/console/evals": "llm-platform eval list",
-        "/console/prompts": "llm-platform prompts list",
-        "/console/providers": "llm-platform health",
+        "/console/workflows": "blacklight classify",
+        "/console/runs": "blacklight session show",
+        "/console/traces": "blacklight trace list",
+        "/console/evals": "blacklight eval list",
+        "/console/prompts": "blacklight prompts list",
+        "/console/providers": "blacklight health",
         "/console/review": "Review Queue",
-        "/console/settings": "llm-platform health",
+        "/console/settings": "blacklight health",
         "/console/docs": "Docs And Recipes",
     }
 
@@ -227,7 +227,7 @@ def test_console_run_demo_links_result_to_trace_and_session(monkeypatch, tmp_pat
     assert "Demo Result" in response.text
     assert "billing" in response.text
     assert "/sessions/console-demo" in response.text
-    assert "llm-platform trace show" in response.text
+    assert "blacklight trace show" in response.text
     assert len(traces) == 1
     assert traces[0]["session_id"] == "console-demo"
 
@@ -246,8 +246,8 @@ def test_console_api_dashboard_returns_first_run_state(monkeypatch, tmp_path):
     assert payload["workflows"][0]["workflow_id"] == "ticket_classifier"
     assert payload["providers"][0]["provider"] == "mock"
     assert payload["settings"]["trace_db_path"].endswith("console.sqlite3")
-    assert "llm-platform demo --verbose" in payload["cli"]["guided_demo"]
-    assert "llm-platform seed demo-data" in payload["cli"]["seed_demo_data"]
+    assert "blacklight demo --verbose" in payload["cli"]["guided_demo"]
+    assert "blacklight seed demo-data" in payload["cli"]["seed_demo_data"]
 
 
 def test_console_api_workflow_run_returns_result_trace_and_cli(monkeypatch, tmp_path):
@@ -270,8 +270,8 @@ def test_console_api_workflow_run_returns_result_trace_and_cli(monkeypatch, tmp_
     assert payload["trace"]["session_id"] == "api-workflow"
     assert payload["trace"]["links"]["session_api"] == "/api/sessions/api-workflow"
     assert payload["cli_command"] == payload["cli_commands"]["primary"]
-    assert "llm-platform classify" in payload["cli"]["equivalent_run"]
-    assert "llm-platform trace show" in payload["cli"]["trace"]
+    assert "blacklight classify" in payload["cli"]["equivalent_run"]
+    assert "blacklight trace show" in payload["cli"]["trace"]
     _assert_cli_command_parseable(payload["cli_command"])
     _assert_cli_command_parseable(payload["cli_commands"]["trace"])
     assert len(traces) == 1
@@ -327,7 +327,7 @@ def test_console_api_eval_run_uses_mock_mode_and_persists_links(monkeypatch, tmp
     assert len(payload["traces"]) == 3
     assert payload["traces"][0]["eval_run_id"] == eval_run_id
     assert payload["cli_command"] == payload["cli_commands"]["run"]
-    assert "llm-platform eval show" in payload["cli"]["show"]
+    assert "blacklight eval show" in payload["cli"]["show"]
     _assert_cli_command_parseable(payload["cli_commands"]["show"])
     assert stored is not None
     assert stored["session_id"] == "api-eval"
@@ -343,8 +343,8 @@ def test_console_api_provider_test_does_not_require_live_keys(monkeypatch, tmp_p
     assert payload["provider"]["provider"] == "openai"
     assert payload["test"]["live_call_performed"] is False
     assert payload["test"]["status"] == "not_configured"
-    assert payload["cli_command"] == "llm-platform health"
-    assert payload["cli"]["health"] == "llm-platform health"
+    assert payload["cli_command"] == "blacklight health"
+    assert payload["cli"]["health"] == "blacklight health"
     _assert_cli_command_parseable(payload["cli_command"])
 
 
@@ -364,10 +364,10 @@ def test_console_api_cli_affordances_include_prompt_compare_and_review_queue(mon
     assert reviews_response.status_code == 200
     assert dashboard_response.status_code == 200
     assert prompts_payload["cli_commands"]["compare"] == (
-        "llm-platform eval compare --baseline-version 1 --candidate-version 2"
+        "blacklight eval compare --baseline-version 1 --candidate-version 2"
     )
-    assert reviews_payload["cli_command"].startswith("llm-platform trace list")
-    assert dashboard_payload["cli_commands"]["guided_demo"].startswith("llm-platform demo")
+    assert reviews_payload["cli_command"].startswith("blacklight trace list")
+    assert dashboard_payload["cli_commands"]["guided_demo"].startswith("blacklight demo")
     for command in [
         prompts_payload["cli_command"],
         prompts_payload["cli_commands"]["compare"],
@@ -390,7 +390,7 @@ def test_console_settings_update_writes_user_env_without_exposing_secrets(monkey
     )
     user_env_path = tmp_path / "user.env"
     user_env_path.write_text("# console-managed settings\nPRIVATE_NOTE=keep\n", encoding="utf-8")
-    monkeypatch.setenv("LLM_PLATFORM_USER_ENV_PATH", str(user_env_path))
+    monkeypatch.setenv("BLACKLIGHT_USER_ENV_PATH", str(user_env_path))
     for key in [
         "LLM_PROVIDER",
         "LLM_MODEL",
@@ -450,7 +450,7 @@ def test_console_settings_update_rejects_unknown_user_env_keys(monkeypatch, tmp_
         api.classifier,
         api.classifier_startup_error,
     )
-    monkeypatch.setenv("LLM_PLATFORM_USER_ENV_PATH", str(tmp_path / "user.env"))
+    monkeypatch.setenv("BLACKLIGHT_USER_ENV_PATH", str(tmp_path / "user.env"))
 
     try:
         response = TestClient(api.app).patch(
@@ -485,7 +485,7 @@ def test_console_settings_update_keeps_api_available_when_provider_extra_is_miss
         api.classifier,
         api.classifier_startup_error,
     )
-    monkeypatch.setenv("LLM_PLATFORM_USER_ENV_PATH", str(tmp_path / "user.env"))
+    monkeypatch.setenv("BLACKLIGHT_USER_ENV_PATH", str(tmp_path / "user.env"))
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
 
     def missing_provider_extra(_settings):
@@ -784,7 +784,7 @@ def test_classify_endpoint_returns_structured_configuration_errors():
     assert payload["error"]["category"] == "configuration_error"
     assert payload["error"]["message"] == "OPENAI_API_KEY is required."
     assert "Provider settings" in payload["error"]["likely_cause"]
-    assert "llm-platform health" in payload["error"]["next_step"]
+    assert "blacklight health" in payload["error"]["next_step"]
 
 
 def test_api_import_keeps_app_available_when_provider_configuration_fails(monkeypatch):

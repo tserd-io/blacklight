@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from llm_platform_starter.examples.ticket_classifier import TicketClassifier
-from llm_platform_starter.models import TicketRequest
-from llm_platform_starter.providers.factory import create_provider
-from llm_platform_starter.settings import load_settings
+from blacklight.examples.ticket_classifier import TicketClassifier
+from blacklight.models import TicketRequest
+from blacklight.providers.factory import create_provider
+from blacklight.settings import load_settings
 
 
 def main() -> None:

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-USER_ENV_PATH_ENV = "LLM_PLATFORM_USER_ENV_PATH"
+USER_ENV_PATH_ENV = "BLACKLIGHT_USER_ENV_PATH"
 DEFAULT_USER_ENV_PATH = "user.env"
 
 USER_EDITABLE_ENV_KEYS = {

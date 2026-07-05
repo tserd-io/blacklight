@@ -4,8 +4,8 @@ import json
 import os
 from urllib import request as urlrequest
 
-from llm_platform_starter.models import ProviderRequest, ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderRequest, ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class OllamaProvider(LLMProvider):

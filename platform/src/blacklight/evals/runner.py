@@ -8,20 +8,20 @@ from collections.abc import Callable
 from importlib import resources
 from statistics import median
 
-from llm_platform_starter.evals.metrics import accuracy
-from llm_platform_starter.guardrails.validation import validate_ticket_output
-from llm_platform_starter.models import GuardrailOutcome, ProviderRequest, TraceRecord
-from llm_platform_starter.observability.cost import estimate_cost
-from llm_platform_starter.observability.evaluations import EvalMetricStore
-from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.prompts.registry import PromptRegistry, PromptTemplate
-from llm_platform_starter.providers.base import LLMProvider
-from llm_platform_starter.providers.mock import MockProvider
-from llm_platform_starter.providers.reliability import ProviderCallError, complete_with_retries
+from blacklight.evals.metrics import accuracy
+from blacklight.guardrails.validation import validate_ticket_output
+from blacklight.models import GuardrailOutcome, ProviderRequest, TraceRecord
+from blacklight.observability.cost import estimate_cost
+from blacklight.observability.evaluations import EvalMetricStore
+from blacklight.observability.storage import TraceStore
+from blacklight.prompts.registry import PromptRegistry, PromptTemplate
+from blacklight.providers.base import LLMProvider
+from blacklight.providers.mock import MockProvider
+from blacklight.providers.reliability import ProviderCallError, complete_with_retries
 
 
 def load_fixture(name: str = "ticket_classification.jsonl") -> list[dict]:
-    raw = resources.files("llm_platform_starter.evals.fixtures").joinpath(name).read_text(
+    raw = resources.files("blacklight.evals.fixtures").joinpath(name).read_text(
         encoding="utf-8"
     )
     return [json.loads(line) for line in raw.splitlines() if line.strip()]

@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from llm_platform_starter.models import TicketClassification
+from blacklight.models import TicketClassification
 
 
 class IdempotencyInProgressError(RuntimeError):

@@ -1,11 +1,11 @@
 from decimal import Decimal
 
-from llm_platform_starter.examples.document_extraction import (
+from blacklight.examples.document_extraction import (
     HumanReviewQueue,
     build_pangea_senior_housing_invoice,
     run_human_review_queue_example,
 )
-from llm_platform_starter.models import GuardrailOutcome
+from blacklight.models import GuardrailOutcome
 
 
 def test_pangea_work_order_invoice_is_public_safe_and_materialized():

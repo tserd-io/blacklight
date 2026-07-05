@@ -30,7 +30,7 @@ The starter records the fields needed to replace assumptions with measured data:
 - `validation_passed`
 - `guardrail_outcome`
 
-Use `llm-platform metrics`, `llm-platform trace list`, `llm-platform trace show`, and `llm-platform session show` to review the live traces behind a cost estimate.
+Use `blacklight metrics`, `blacklight trace list`, `blacklight trace show`, and `blacklight session show` to review the live traces behind a cost estimate.
 
 ## Hosted Provider Estimate
 
@@ -202,8 +202,8 @@ These thresholds are examples. The important ownership practice is to connect ev
 For regular live analysis:
 
 1. Run the workflow with a stable `session_id`.
-2. Inspect `llm-platform session show <session_id>` for per-run cost, failures, review outcomes, and provider/model use.
-3. Inspect `llm-platform metrics` for aggregate cost, latency, failure rate, and provider/model breakdowns.
+2. Inspect `blacklight session show <session_id>` for per-run cost, failures, review outcomes, and provider/model use.
+3. Inspect `blacklight metrics` for aggregate cost, latency, failure rate, and provider/model breakdowns.
 4. Run evals before changing prompts or models.
 5. Compare measured cost to the monthly budget and the value of the automation.
 6. Record model/provider changes as operational decisions, not incidental code changes.

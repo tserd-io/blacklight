@@ -2,10 +2,10 @@ import json
 
 import pytest
 
-from llm_platform_starter.cli import main
-from llm_platform_starter.models import GuardrailOutcome, TraceRecord
-from llm_platform_starter.observability.evaluations import EvalMetricStore
-from llm_platform_starter.observability.storage import TraceStore
+from blacklight.cli import main
+from blacklight.models import GuardrailOutcome, TraceRecord
+from blacklight.observability.evaluations import EvalMetricStore
+from blacklight.observability.storage import TraceStore
 
 
 def test_classify_command_prints_ticket_json(capsys, tmp_path):
@@ -43,11 +43,11 @@ def test_demo_command_runs_mock_workflow_and_prints_next_steps(capsys, tmp_path)
     assert payload["result"]["severity"] == "medium"
     assert payload["trace"]["request_id"] == traces[0]["request_id"]
     assert payload["trace"]["trace_db_path"] == str(trace_db_path)
-    assert "llm-platform trace show" in payload["trace"]["inspect_command"]
-    assert "llm-platform session show demo" in payload["trace"]["session_command"]
-    assert "llm-platform classify" in payload["next_commands"]["equivalent_workflow_command"]
+    assert "blacklight trace show" in payload["trace"]["inspect_command"]
+    assert "blacklight session show demo" in payload["trace"]["session_command"]
+    assert "blacklight classify" in payload["next_commands"]["equivalent_workflow_command"]
     assert "--subject" in payload["next_commands"]["equivalent_workflow_command"]
-    assert "llm-platform eval run" in payload["next_commands"]["eval_command"]
+    assert "blacklight eval run" in payload["next_commands"]["eval_command"]
     assert payload["runtime"]["provider"] == "mock"
     assert payload["runtime"]["live_credentials_required"] is False
     assert payload["trace"]["record"]["provider"] == "mock"
@@ -478,15 +478,15 @@ def test_classify_configuration_error_returns_actionable_cli_error(
     assert captured.out == ""
     assert payload["error"]["category"] == "configuration_error"
     assert "OPENAI_API_KEY" in payload["error"]["message"]
-    assert "llm-platform health" in payload["error"]["next_step"]
+    assert "blacklight health" in payload["error"]["next_step"]
 
 
 def test_cli_debug_error_mode_reraises_unexpected_errors(monkeypatch):
     def broken_health(_args):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("llm_platform_starter.cli.health", broken_health)
-    monkeypatch.setenv("LLM_PLATFORM_DEBUG_ERRORS", "1")
+    monkeypatch.setattr("blacklight.cli.health", broken_health)
+    monkeypatch.setenv("BLACKLIGHT_DEBUG_ERRORS", "1")
 
     with pytest.raises(RuntimeError, match="boom"):
         main(["health"])

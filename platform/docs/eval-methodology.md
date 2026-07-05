@@ -21,7 +21,7 @@ Prompt-version comparisons are scoped by prompt registry metadata. A prompt vers
 Use:
 
 ```bash
-llm-platform eval compare --baseline-version 1 --candidate-version 2
+blacklight eval compare --baseline-version 1 --candidate-version 2
 ```
 
 The report includes summary deltas for accuracy, schema validity, review rate, latency, estimated cost, and token use, plus per-case before/after fields and deltas.

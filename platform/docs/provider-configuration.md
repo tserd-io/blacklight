@@ -13,8 +13,8 @@ The custom path is the recommended way to try local LLM runtimes without adding 
 A custom provider must implement `LLMProvider`:
 
 ```python
-from llm_platform_starter.models import ProviderRequest, ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderRequest, ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class MyProvider(LLMProvider):
@@ -47,8 +47,8 @@ This example shows the shape for an Ollama-style HTTP endpoint:
 import json
 from urllib import request as urlrequest
 
-from llm_platform_starter.models import ProviderRequest, ProviderResponse
-from llm_platform_starter.providers.base import LLMProvider
+from blacklight.models import ProviderRequest, ProviderResponse
+from blacklight.providers.base import LLMProvider
 
 
 class LocalHTTPProvider(LLMProvider):
@@ -91,7 +91,7 @@ set LLM_CUSTOM_PROVIDER=my_project.local_provider:LocalHTTPProvider
 Then run the same platform surface:
 
 ```bash
-llm-platform classify --subject "Login error" --body "The export page fails after login."
+blacklight classify --subject "Login error" --body "The export page fails after login."
 ```
 
 ## Provider Smoke Tests
@@ -155,7 +155,7 @@ Point the platform at the bundled Ollama adapter:
 
 ```bash
 set LLM_PROVIDER=custom
-set LLM_CUSTOM_PROVIDER=llm_platform_starter.providers.ollama_provider:OllamaProvider
+set LLM_CUSTOM_PROVIDER=blacklight.providers.ollama_provider:OllamaProvider
 set LLM_MODEL=llama3.1
 set OLLAMA_BASE_URL=http://localhost:11434
 ```
@@ -163,7 +163,7 @@ set OLLAMA_BASE_URL=http://localhost:11434
 Then run the normal CLI path:
 
 ```bash
-llm-platform classify --subject "Login error" --body "The export page fails after login."
+blacklight classify --subject "Login error" --body "The export page fails after login."
 ```
 
 This is a local-provider configuration path, not the default release path. CI and quickstart still use `mock` so they do not require Docker, Ollama, model downloads, GPU access, or live provider credentials.

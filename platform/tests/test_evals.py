@@ -1,11 +1,11 @@
-from llm_platform_starter.evals.runner import (
+from blacklight.evals.runner import (
     compare_ticket_classification_prompt_versions,
     run_ticket_classification_eval,
 )
-from llm_platform_starter.models import ProviderRequest, ProviderResponse
-from llm_platform_starter.observability.evaluations import EvalMetricStore
-from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.providers.mock import MockProvider
+from blacklight.models import ProviderRequest, ProviderResponse
+from blacklight.observability.evaluations import EvalMetricStore
+from blacklight.observability.storage import TraceStore
+from blacklight.providers.mock import MockProvider
 
 
 class FakeClock:

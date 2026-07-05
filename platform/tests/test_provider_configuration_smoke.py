@@ -3,10 +3,10 @@ import os
 
 import pytest
 
-from llm_platform_starter.models import ProviderRequest, ProviderResponse
-from llm_platform_starter.providers.factory import create_provider
-from llm_platform_starter.providers.mock import MockProvider
-from llm_platform_starter.settings import Settings, load_settings
+from blacklight.models import ProviderRequest, ProviderResponse
+from blacklight.providers.factory import create_provider
+from blacklight.providers.mock import MockProvider
+from blacklight.settings import Settings, load_settings
 
 
 SMOKE_PROMPT = "Classify this synthetic support ticket: duplicate billing after renewal."

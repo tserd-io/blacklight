@@ -4,24 +4,24 @@ import hashlib
 import time
 import uuid
 
-from llm_platform_starter.errors import GuardrailValidationError
-from llm_platform_starter.guardrails.validation import validate_ticket_output
-from llm_platform_starter.models import (
+from blacklight.errors import GuardrailValidationError
+from blacklight.guardrails.validation import validate_ticket_output
+from blacklight.models import (
     GuardrailOutcome,
     ProviderRequest,
     TicketClassification,
     TicketRequest,
     TraceRecord,
 )
-from llm_platform_starter.observability.cost import estimate_cost
-from llm_platform_starter.observability.idempotency import (
+from blacklight.observability.cost import estimate_cost
+from blacklight.observability.idempotency import (
     IdempotencyInProgressError,
     IdempotencyStore,
 )
-from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.prompts.registry import PromptRegistry
-from llm_platform_starter.providers.base import LLMProvider
-from llm_platform_starter.providers.reliability import (
+from blacklight.observability.storage import TraceStore
+from blacklight.prompts.registry import PromptRegistry
+from blacklight.providers.base import LLMProvider
+from blacklight.providers.reliability import (
     KeyedRateLimiter,
     ProviderCallError,
     complete_with_retries,

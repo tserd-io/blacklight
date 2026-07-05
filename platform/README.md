@@ -19,11 +19,11 @@ Blacklight Studio keeps those ideas small enough to read quickly while still run
 
 ## What To Review First
 
-- [src/llm_platform_starter/examples/ticket_classifier.py](src/llm_platform_starter/examples/ticket_classifier.py): example workflow using prompts, providers, guardrails, retries, idempotency, and traces
-- [src/llm_platform_starter/providers/factory.py](src/llm_platform_starter/providers/factory.py): mock/OpenAI/custom provider selection
+- [src/blacklight/examples/ticket_classifier.py](src/blacklight/examples/ticket_classifier.py): example workflow using prompts, providers, guardrails, retries, idempotency, and traces
+- [src/blacklight/providers/factory.py](src/blacklight/providers/factory.py): mock/OpenAI/custom provider selection
 - [docs/provider-configuration.md](docs/provider-configuration.md): OpenAI, custom provider, and Ollama local-runtime configuration
-- [src/llm_platform_starter/evals/runner.py](src/llm_platform_starter/evals/runner.py): deterministic regression evals
-- [src/llm_platform_starter/observability/storage.py](src/llm_platform_starter/observability/storage.py): SQLite trace store and metrics
+- [src/blacklight/evals/runner.py](src/blacklight/evals/runner.py): deterministic regression evals
+- [src/blacklight/observability/storage.py](src/blacklight/observability/storage.py): SQLite trace store and metrics
 - [docs/architecture.md](docs/architecture.md): component boundaries and request flow
 - [docs/create-your-own-workflow.md](docs/create-your-own-workflow.md): guide for adapting the starter to a new task
 - [docs/tradeoffs.md](docs/tradeoffs.md): what is intentionally simplified
@@ -55,7 +55,7 @@ pytest
 Check the default runtime:
 
 ```bash
-llm-platform health
+blacklight health
 ```
 
 Expected default signal:
@@ -74,7 +74,7 @@ The mock provider is the intended fresh-clone path. No API key is required.
 Run the guided first demo:
 
 ```bash
-llm-platform demo --verbose
+blacklight demo --verbose
 ```
 
 The demo uses the mock provider, runs the `ticket_classifier` workflow with synthetic sample input, writes a trace, and prints the exact follow-up commands for trace inspection, evals, and the equivalent lower-level workflow call.
@@ -82,7 +82,7 @@ The demo uses the mock provider, runs the `ticket_classifier` workflow with synt
 Seed demo state for console/API surfaces:
 
 ```bash
-llm-platform seed demo-data --trace-db-path traces.sqlite3
+blacklight seed demo-data --trace-db-path traces.sqlite3
 ```
 
 The seed command loads synthetic mock-mode sample inputs, successful and needs-review trace records, a persisted eval run with linked eval cases, and prompt-version metadata. It is safe to rerun: stable request IDs and eval run IDs update existing demo records instead of duplicating them.
@@ -90,7 +90,7 @@ The seed command loads synthetic mock-mode sample inputs, successful and needs-r
 ## CLI Example
 
 ```bash
-llm-platform classify ^
+blacklight classify ^
   --subject "Refund request" ^
   --body "Customer asks for a refund after duplicate billing." ^
   --trace-db-path traces.sqlite3 ^
@@ -114,7 +114,7 @@ Example output:
 Run the API:
 
 ```bash
-uvicorn llm_platform_starter.api:app --reload
+uvicorn blacklight.api:app --reload
 ```
 
 Request:
@@ -145,7 +145,7 @@ After requests have written traces, inspect session history in the app:
 http://127.0.0.1:8000/sessions/demo
 ```
 
-The session page shows a timeline of workflow runs with provider, model, status, estimated cost, review outcome, and failure reason. Use the `accepted`, `needs_review`, `rejected`, and `failed` filters to review the same trace/session model exposed by `llm-platform session show`.
+The session page shows a timeline of workflow runs with provider, model, status, estimated cost, review outcome, and failure reason. Use the `accepted`, `needs_review`, `rejected`, and `failed` filters to review the same trace/session model exposed by `blacklight session show`.
 
 Review outputs routed to human review:
 
@@ -160,13 +160,13 @@ The review queue lists `needs_review` and `rejected` outputs, explains why each 
 Build the API image:
 
 ```bash
-docker build -t llm-platform-starter .
+docker build -t blacklight .
 ```
 
 Run the container in default mock mode:
 
 ```bash
-docker run --rm -p 8000:8000 llm-platform-starter
+docker run --rm -p 8000:8000 blacklight
 ```
 
 Check the API health endpoint:
@@ -192,25 +192,25 @@ Console API responses include a copy-friendly `cli_command` plus named `cli_comm
 Examples:
 
 ```bash
-llm-platform demo --verbose --trace-db-path traces.sqlite3
-llm-platform classify --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --session-id demo --trace-db-path traces.sqlite3
-llm-platform trace list --trace-db-path traces.sqlite3 --limit 10
-llm-platform trace show seed-demo:billing-success --trace-db-path traces.sqlite3
-llm-platform eval run --trace-db-path traces.sqlite3 --session-id eval-demo
-llm-platform eval show seed-demo-eval --trace-db-path traces.sqlite3
-llm-platform prompts show ticket_classifier
-llm-platform eval compare --baseline-version 1 --candidate-version 2
-llm-platform health
+blacklight demo --verbose --trace-db-path traces.sqlite3
+blacklight classify --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --session-id demo --trace-db-path traces.sqlite3
+blacklight trace list --trace-db-path traces.sqlite3 --limit 10
+blacklight trace show seed-demo:billing-success --trace-db-path traces.sqlite3
+blacklight eval run --trace-db-path traces.sqlite3 --session-id eval-demo
+blacklight eval show seed-demo-eval --trace-db-path traces.sqlite3
+blacklight prompts show ticket_classifier
+blacklight eval compare --baseline-version 1 --candidate-version 2
+blacklight health
 ```
 
-Review queue and provider-readiness screens use existing executable equivalents today: `llm-platform trace list ...` for reviewable outputs and `llm-platform health` for provider configuration status.
+Review queue and provider-readiness screens use existing executable equivalents today: `blacklight trace list ...` for reviewable outputs and `blacklight health` for provider configuration status.
 
 ## Eval Example
 
 Run deterministic evals:
 
 ```bash
-llm-platform eval run --trace-db-path traces.sqlite3 --session-id eval-demo
+blacklight eval run --trace-db-path traces.sqlite3 --session-id eval-demo
 ```
 
 The eval report includes a summary and per-case diagnostics:
@@ -235,8 +235,8 @@ The eval report includes a summary and per-case diagnostics:
 Inspect persisted eval history:
 
 ```bash
-llm-platform eval list --trace-db-path traces.sqlite3
-llm-platform eval show <eval_run_id> --trace-db-path traces.sqlite3
+blacklight eval list --trace-db-path traces.sqlite3
+blacklight eval show <eval_run_id> --trace-db-path traces.sqlite3
 ```
 
 Each eval case includes a `trace_request_id` so a case can be followed into the trace store.
@@ -244,7 +244,7 @@ Each eval case includes a `trace_request_id` so a case can be followed into the 
 Compare prompt versions:
 
 ```bash
-llm-platform eval compare --baseline-version 1 --candidate-version 2
+blacklight eval compare --baseline-version 1 --candidate-version 2
 ```
 
 Prompt comparison is metadata-gated: versions must share the same comparison group, output schema, and eval fixture before the report will treat them as comparable.
@@ -254,7 +254,7 @@ Prompt comparison is metadata-gated: versions must share the same comparison gro
 List recent traces:
 
 ```bash
-llm-platform trace list --trace-db-path traces.sqlite3 --limit 1
+blacklight trace list --trace-db-path traces.sqlite3 --limit 1
 ```
 
 Example trace:
@@ -280,13 +280,13 @@ Example trace:
 Show one trace:
 
 ```bash
-llm-platform trace show <trace_id> --trace-db-path traces.sqlite3
+blacklight trace show <trace_id> --trace-db-path traces.sqlite3
 ```
 
 Inspect all traces for one session in chronological order:
 
 ```bash
-llm-platform session show demo --trace-db-path traces.sqlite3
+blacklight session show demo --trace-db-path traces.sqlite3
 ```
 
 Session history is for operational review: it shows what happened during a user, workflow, or CI session, including per-request traces and aggregate totals for tokens, estimated cost, failures, review routing, and provider/model usage. Prompt comparison is for eval regression: it compares two compatible prompt versions against the same fixture and schema.
@@ -294,7 +294,7 @@ Session history is for operational review: it shows what happened during a user,
 Print aggregate metrics:
 
 ```bash
-llm-platform metrics --trace-db-path traces.sqlite3
+blacklight metrics --trace-db-path traces.sqlite3
 ```
 
 Example metrics:
@@ -375,7 +375,7 @@ set LLM_MODEL=my-model
 
 `LLM_CUSTOM_PROVIDER` can point to an `LLMProvider` subclass, an `LLMProvider` instance, or a zero-argument factory returning one.
 
-The project is also configured for local model experiments with Ollama. Use the included `docker-compose.ollama.yml` to start Ollama, pull a model such as `llama3.1`, and point `LLM_CUSTOM_PROVIDER` at the bundled `llm_platform_starter.providers.ollama_provider:OllamaProvider` adapter. Users who already have their own provider, local endpoint, or model runtime can keep using the same custom-provider contract instead.
+The project is also configured for local model experiments with Ollama. Use the included `docker-compose.ollama.yml` to start Ollama, pull a model such as `llama3.1`, and point `LLM_CUSTOM_PROVIDER` at the bundled `blacklight.providers.ollama_provider:OllamaProvider` adapter. Users who already have their own provider, local endpoint, or model runtime can keep using the same custom-provider contract instead.
 
 Local model servers such as Ollama, LM Studio, llama.cpp, vLLM, or a private localhost endpoint can use the same custom provider path. See [docs/provider-configuration.md](docs/provider-configuration.md).
 
@@ -390,7 +390,7 @@ Guardrails treat validation as a routing decision:
 The document-extraction example shows a synthetic Pangea government RFP/work order for dignified senior housing. It converts the work order into an invoice-style materials list and routes accepted, needs-review, and rejected outputs through a lightweight local human-review queue:
 
 ```bash
-python -m llm_platform_starter.examples.document_extraction
+python -m blacklight.examples.document_extraction
 ```
 
 ## Production Extensions

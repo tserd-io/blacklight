@@ -10,24 +10,24 @@ Expose the platform through simple commands, not only Python modules, so the MVP
 Tasks:
 
 - Add a console script in `pyproject.toml`.
-- Add `llm-platform classify`.
-- Add `llm-platform eval`.
-- Add `llm-platform metrics`.
-- Add `llm-platform health`.
-- Add `llm-platform prompts list`.
-- Add `llm-platform prompts show`.
-- Add `llm-platform trace list`.
-- Add `llm-platform trace show`.
+- Add `blacklight classify`.
+- Add `blacklight eval`.
+- Add `blacklight metrics`.
+- Add `blacklight health`.
+- Add `blacklight prompts list`.
+- Add `blacklight prompts show`.
+- Add `blacklight trace list`.
+- Add `blacklight trace show`.
 - Keep command output JSON-friendly.
 
 Acceptance criteria:
 
-- `llm-platform classify --subject "Refund" --body "Duplicate charge"` returns valid JSON.
-- `llm-platform eval` returns an eval summary.
-- `llm-platform metrics` works against the configured SQLite trace DB.
-- `llm-platform health` reports local runtime configuration without requiring live API keys.
-- `llm-platform prompts list` and `llm-platform prompts show ticket_classifier` expose prompt registry metadata.
-- `llm-platform trace list` and `llm-platform trace show <request_id>` expose recent trace records from SQLite.
+- `blacklight classify --subject "Refund" --body "Duplicate charge"` returns valid JSON.
+- `blacklight eval` returns an eval summary.
+- `blacklight metrics` works against the configured SQLite trace DB.
+- `blacklight health` reports local runtime configuration without requiring live API keys.
+- `blacklight prompts list` and `blacklight prompts show ticket_classifier` expose prompt registry metadata.
+- `blacklight trace list` and `blacklight trace show <request_id>` expose recent trace records from SQLite.
 - Tests cover the CLI commands without requiring live API keys.
 
 Suggested labels:
@@ -119,11 +119,11 @@ Tasks:
 
 Acceptance criteria:
 
-- `llm-platform eval` prints a JSON report with one `summary` object and per-case results.
+- `blacklight eval` prints a JSON report with one `summary` object and per-case results.
 - Summary includes accuracy, schema validity, review rate, latency, token usage, estimated cost, retry, error, and category breakdown metrics.
 - Eval report includes per-case quality, latency, token, cost, retry, and error diagnostics.
 - Eval metrics can be related to trace records by `session_id`, and per-case records include a future trace join key.
-- `llm-platform eval list` and `llm-platform eval show <eval_run_id>` expose persisted eval history and related traces.
+- `blacklight eval list` and `blacklight eval show <eval_run_id>` expose persisted eval history and related traces.
 - Tests validate the report shape.
 - Eval execution remains deterministic with the mock provider.
 

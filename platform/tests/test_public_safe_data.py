@@ -5,8 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_SAFE_FILES = [
-    ROOT / "src" / "llm_platform_starter" / "evals" / "fixtures" / "ticket_classification.jsonl",
-    ROOT / "src" / "llm_platform_starter" / "prompts" / "templates" / "ticket_classifier.json",
+    ROOT / "src" / "blacklight" / "evals" / "fixtures" / "ticket_classification.jsonl",
+    ROOT / "src" / "blacklight" / "prompts" / "templates" / "ticket_classifier.json",
 ]
 PRIVATE_IDENTIFIER_PATTERNS = {
     "email address": re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b"),

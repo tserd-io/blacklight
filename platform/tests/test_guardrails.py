@@ -1,7 +1,7 @@
 import json
 
-from llm_platform_starter.guardrails.validation import validate_ticket_output
-from llm_platform_starter.models import GuardrailOutcome
+from blacklight.guardrails.validation import validate_ticket_output
+from blacklight.models import GuardrailOutcome
 
 
 def test_validate_ticket_output_accepts_schema():

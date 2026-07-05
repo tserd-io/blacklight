@@ -2,17 +2,17 @@ import sqlite3
 
 import pytest
 
-from llm_platform_starter.examples.ticket_classifier import TicketClassifier
-from llm_platform_starter.models import (
+from blacklight.examples.ticket_classifier import TicketClassifier
+from blacklight.models import (
     GuardrailOutcome,
     ProviderRequest,
     ProviderResponse,
     TicketRequest,
     TraceRecord,
 )
-from llm_platform_starter.observability.storage import TraceStore
-from llm_platform_starter.providers.base import LLMProvider
-from llm_platform_starter.providers.mock import MockProvider
+from blacklight.observability.storage import TraceStore
+from blacklight.providers.base import LLMProvider
+from blacklight.providers.mock import MockProvider
 
 
 class InvalidJsonProvider(LLMProvider):
