@@ -24,6 +24,7 @@ This repo keeps those ideas small enough to read quickly while still runnable en
 - [src/llm_platform_starter/evals/runner.py](src/llm_platform_starter/evals/runner.py): deterministic regression evals
 - [src/llm_platform_starter/observability/storage.py](src/llm_platform_starter/observability/storage.py): SQLite trace store and metrics
 - [docs/architecture.md](docs/architecture.md): component boundaries and request flow
+- [docs/create-your-own-workflow.md](docs/create-your-own-workflow.md): guide for adapting the starter to a new task
 - [docs/tradeoffs.md](docs/tradeoffs.md): what is intentionally simplified
 
 ## Features
