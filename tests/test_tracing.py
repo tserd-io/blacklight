@@ -309,5 +309,5 @@ def test_trace_store_lists_by_session_id(tmp_path):
 
     traces = store.list_by_session_id("session-a")
 
-    assert [trace["request_id"] for trace in traces] == ["request-3", "request-1"]
+    assert [trace["request_id"] for trace in traces] == ["request-1", "request-3"]
     assert all(trace["session_id"] == "session-a" for trace in traces)
