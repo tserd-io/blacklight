@@ -68,6 +68,23 @@ def test_demo_command_ignores_live_provider_environment(capsys, monkeypatch, tmp
     assert traces[0]["model"] == "mock-ticket-classifier"
 
 
+def test_seed_demo_data_command_populates_mock_surfaces(capsys, tmp_path):
+    trace_db_path = tmp_path / "seed.sqlite3"
+
+    exit_code = main(["seed", "demo-data", "--trace-db-path", str(trace_db_path)])
+    payload = json.loads(capsys.readouterr().out)
+    traces = TraceStore(trace_db_path).list_by_session_id("seed-demo", limit=20)
+    eval_run = EvalMetricStore(trace_db_path).get_run("seed-demo-eval")
+
+    assert exit_code == 0
+    assert payload["seed"] == "mock_mode_demo_data"
+    assert payload["runs"][1]["guardrail_outcome"] == "needs_review"
+    assert payload["eval_run"]["case_count"] == 3
+    assert len(traces) == 5
+    assert eval_run is not None
+    assert eval_run["session_id"] == "seed-demo"
+
+
 def test_eval_command_prints_summary(capsys, tmp_path):
     trace_db_path = tmp_path / "traces.sqlite3"
     exit_code = main(

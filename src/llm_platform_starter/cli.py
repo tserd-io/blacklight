@@ -7,6 +7,7 @@ import sys
 import uuid
 from typing import Any
 
+from llm_platform_starter.demo_seed import seed_demo_data
 from llm_platform_starter.errors import (
     describe_exception,
     is_known_error,
@@ -339,6 +340,12 @@ def session_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def seed_demo(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    _print_json(seed_demo_data(args.trace_db_path or settings.trace_db_path))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="llm-platform",
@@ -473,6 +480,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     health_parser = subparsers.add_parser("health", help="Print local runtime configuration.")
     health_parser.set_defaults(func=health)
+
+    seed_parser = subparsers.add_parser("seed", help="Load synthetic mock-mode demo data.")
+    seed_subparsers = seed_parser.add_subparsers(dest="seed_command", required=True)
+    seed_demo_parser = seed_subparsers.add_parser(
+        "demo-data",
+        help="Seed mock-mode runs, traces, evals, and prompt metadata.",
+    )
+    seed_demo_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    seed_demo_parser.set_defaults(func=seed_demo)
 
     prompts_parser = subparsers.add_parser("prompts", help="Inspect prompt templates.")
     prompts_subparsers = prompts_parser.add_subparsers(dest="prompts_command", required=True)
