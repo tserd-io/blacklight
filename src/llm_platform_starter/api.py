@@ -84,8 +84,12 @@ class ConsoleSettingsUpdateRequest(BaseModel):
 
 
 def _build_classifier() -> TicketClassifier:
+    try:
+        provider = create_provider(settings)
+    except RuntimeError as exc:
+        raise ProviderConfigurationError(str(exc)) from exc
     return TicketClassifier(
-        provider=create_provider(settings),
+        provider=provider,
         model=settings.model,
         trace_store=trace_store,
         idempotency_store=idempotency_store,

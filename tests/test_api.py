@@ -472,6 +472,56 @@ def test_console_settings_update_rejects_unknown_user_env_keys(monkeypatch, tmp_
     assert "Unsupported user.env setting" in response.json()["detail"]
 
 
+def test_console_settings_update_keeps_api_available_when_provider_extra_is_missing(
+    monkeypatch,
+    tmp_path,
+):
+    original_state = (
+        api.settings,
+        api.trace_store,
+        api.idempotency_store,
+        api.eval_store,
+        api.review_store,
+        api.classifier,
+        api.classifier_startup_error,
+    )
+    monkeypatch.setenv("LLM_PLATFORM_USER_ENV_PATH", str(tmp_path / "user.env"))
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    def missing_provider_extra(_settings):
+        raise RuntimeError("Install the openai extra to use OpenAIProvider.")
+
+    monkeypatch.setattr(api, "create_provider", missing_provider_extra)
+
+    try:
+        response = TestClient(api.app).patch(
+            "/api/console/settings",
+            json={
+                "settings": {
+                    "LLM_PROVIDER": "openai",
+                    "OPENAI_API_KEY": "sk-test-secret",
+                }
+            },
+        )
+        payload = response.json()
+        startup_error = api.classifier_startup_error
+    finally:
+        (
+            api.settings,
+            api.trace_store,
+            api.idempotency_store,
+            api.eval_store,
+            api.review_store,
+            api.classifier,
+            api.classifier_startup_error,
+        ) = original_state
+
+    assert response.status_code == 200
+    assert payload["settings"]["provider"] == "openai"
+    assert startup_error is not None
+    assert "openai extra" in str(startup_error)
+
+
 def test_session_history_json_returns_filtered_session_timeline(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "trace_store", _build_session_history_store(tmp_path))
 
