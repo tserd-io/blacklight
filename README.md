@@ -1,6 +1,6 @@
 ![Blacklight Studio logo](platform/docs/assets/blacklight-studio-readme-logo.png)
 
-# LLM Platform Starter
+# Blacklight Studio: Your LLM Platform Starter
 
 Blacklight Studio is a compact internal AI workflow studio that shows how teams can route model calls through shared provider, prompt, eval, guardrail, and observability layers instead of scattering one-off prompts across applications.
 
