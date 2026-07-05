@@ -155,6 +155,14 @@ llm-platform eval show <eval_run_id> --trace-db-path traces.sqlite3
 
 Each eval case includes a `trace_request_id` so a case can be followed into the trace store.
 
+Compare prompt versions:
+
+```bash
+llm-platform eval compare --baseline-version 1 --candidate-version 2
+```
+
+Prompt comparison is metadata-gated: versions must share the same comparison group, output schema, and eval fixture before the report will treat them as comparable.
+
 ## Trace And Metrics Example
 
 List recent traces:

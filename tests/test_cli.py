@@ -70,6 +70,48 @@ def test_eval_run_subcommand_prints_summary(capsys, tmp_path):
     assert payload["summary"]["accuracy"] == 1.0
 
 
+def test_eval_run_subcommand_accepts_prompt_version(capsys, tmp_path):
+    trace_db_path = tmp_path / "traces.sqlite3"
+    exit_code = main(
+        [
+            "eval",
+            "run",
+            "--prompt-version",
+            "2",
+            "--trace-db-path",
+            str(trace_db_path),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["prompt_version"] == 2
+    assert payload["summary"]["accuracy"] == 1.0
+
+
+def test_eval_compare_command_prints_prompt_version_report(capsys):
+    exit_code = main(
+        [
+            "eval",
+            "compare",
+            "--baseline-version",
+            "1",
+            "--candidate-version",
+            "2",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["comparison_group"] == "support_ticket_classification"
+    assert payload["baseline"]["prompt_version"] == 1
+    assert payload["candidate"]["prompt_version"] == 2
+    assert payload["summary_deltas"]["accuracy"]["delta"] == 0.0
+    assert payload["case_changes"]
+
+
 def test_eval_history_commands_read_persisted_runs(capsys, tmp_path):
     trace_db_path = tmp_path / "traces.sqlite3"
     main(
@@ -157,6 +199,8 @@ def test_prompts_list_command_prints_prompt_metadata(capsys):
     assert exit_code == 0
     assert payload["prompts"][0]["prompt_id"] == "ticket_classifier"
     assert payload["prompts"][0]["version"] == 1
+    assert payload["prompts"][0]["comparison_group"] == "support_ticket_classification"
+    assert payload["prompts"][0]["output_schema"] == "TicketClassification"
 
 
 def test_prompts_show_command_prints_template(capsys):
@@ -166,6 +210,8 @@ def test_prompts_show_command_prints_template(capsys):
 
     assert exit_code == 0
     assert payload["prompt_id"] == "ticket_classifier"
+    assert payload["display_name"] == "Support Ticket Classifier"
+    assert payload["comparison_group"] == "support_ticket_classification"
     assert "Subject: $subject" in payload["template"]
 
 

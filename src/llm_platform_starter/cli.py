@@ -7,7 +7,10 @@ import sys
 from typing import Any
 
 from llm_platform_starter.errors import describe_exception, is_known_error, trace_not_found_error
-from llm_platform_starter.evals.runner import run_ticket_classification_eval
+from llm_platform_starter.evals.runner import (
+    compare_ticket_classification_prompt_versions,
+    run_ticket_classification_eval,
+)
 from llm_platform_starter.examples.ticket_classifier import TicketClassifier
 from llm_platform_starter.models import TicketRequest
 from llm_platform_starter.observability.evaluations import EvalMetricStore
@@ -80,8 +83,20 @@ def eval_run(args: argparse.Namespace) -> int:
     _print_json(
         run_ticket_classification_eval(
             session_id=args.session_id,
+            prompt_version=args.prompt_version,
             eval_store=eval_store,
             trace_store=trace_store,
+        )
+    )
+    return 0
+
+
+def eval_compare(args: argparse.Namespace) -> int:
+    _print_json(
+        compare_ticket_classification_prompt_versions(
+            baseline_version=args.baseline_version,
+            candidate_version=args.candidate_version,
+            session_id=args.session_id,
         )
     )
     return 0
@@ -141,8 +156,15 @@ def prompts_list(_args: argparse.Namespace) -> int:
             "prompts": [
                 {
                     "prompt_id": prompt.prompt_id,
+                    "display_name": prompt.display_name,
                     "version": prompt.version,
                     "active": prompt.active,
+                    "domain": prompt.domain,
+                    "task_type": prompt.task_type,
+                    "output_schema": prompt.output_schema,
+                    "eval_fixture": prompt.eval_fixture,
+                    "comparison_group": prompt.comparison_group,
+                    "tags": prompt.tags,
                     "input_variables": prompt.input_variables,
                     "notes": prompt.notes,
                 }
@@ -158,8 +180,15 @@ def prompts_show(args: argparse.Namespace) -> int:
     _print_json(
         {
             "prompt_id": prompt.prompt_id,
+            "display_name": prompt.display_name,
             "version": prompt.version,
             "active": prompt.active,
+            "domain": prompt.domain,
+            "task_type": prompt.task_type,
+            "output_schema": prompt.output_schema,
+            "eval_fixture": prompt.eval_fixture,
+            "comparison_group": prompt.comparison_group,
+            "tags": prompt.tags,
             "input_variables": prompt.input_variables,
             "notes": prompt.notes,
             "template": prompt.template,
@@ -224,6 +253,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="SQLite metrics database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
     )
+    eval_parser.add_argument(
+        "--prompt-version",
+        type=int,
+        default=None,
+        help="Prompt version to evaluate. Defaults to the active version.",
+    )
     eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
     eval_run_parser = eval_subparsers.add_parser("run", help="Run deterministic ticket evals.")
     eval_run_parser.add_argument(
@@ -236,7 +271,35 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="SQLite metrics database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
     )
+    eval_run_parser.add_argument(
+        "--prompt-version",
+        type=int,
+        default=None,
+        help="Prompt version to evaluate. Defaults to the active version.",
+    )
     eval_run_parser.set_defaults(func=eval_run)
+    eval_compare_parser = eval_subparsers.add_parser(
+        "compare",
+        help="Compare deterministic eval reports across prompt versions.",
+    )
+    eval_compare_parser.add_argument(
+        "--baseline-version",
+        type=int,
+        required=True,
+        help="Baseline prompt version.",
+    )
+    eval_compare_parser.add_argument(
+        "--candidate-version",
+        type=int,
+        required=True,
+        help="Candidate prompt version.",
+    )
+    eval_compare_parser.add_argument(
+        "--session-id",
+        default="eval-compare",
+        help="Session id included in generated comparison eval run ids.",
+    )
+    eval_compare_parser.set_defaults(func=eval_compare)
     eval_list_parser = eval_subparsers.add_parser("list", help="List persisted eval runs.")
     eval_list_parser.add_argument("--limit", type=int, default=10, help="Maximum eval runs to return.")
     eval_list_parser.add_argument(

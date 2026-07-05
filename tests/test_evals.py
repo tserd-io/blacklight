@@ -1,4 +1,7 @@
-from llm_platform_starter.evals.runner import run_ticket_classification_eval
+from llm_platform_starter.evals.runner import (
+    compare_ticket_classification_prompt_versions,
+    run_ticket_classification_eval,
+)
 from llm_platform_starter.models import ProviderRequest, ProviderResponse
 from llm_platform_starter.observability.evaluations import EvalMetricStore
 from llm_platform_starter.observability.storage import TraceStore
@@ -103,6 +106,52 @@ def test_ticket_classification_eval_reports_case_diagnostics():
     assert case["retry_count"] == 0
     assert case["error_category"] is None
     assert case["validation_errors"] == []
+
+
+def test_ticket_classification_eval_accepts_prompt_version():
+    report = run_ticket_classification_eval(
+        prompt_version=2,
+        monotonic=FakeClock().monotonic,
+    )
+
+    assert report["prompt_version"] == 2
+    assert report["summary"]["accuracy"] == 1.0
+    assert all(case["schema_valid"] for case in report["cases"])
+
+
+def test_prompt_version_comparison_report_is_deterministic():
+    report = compare_ticket_classification_prompt_versions(
+        baseline_version=1,
+        candidate_version=2,
+        session_id="compare-test",
+        monotonic=FakeClock().monotonic,
+    )
+
+    assert set(report) == {
+        "prompt_id",
+        "comparison_group",
+        "output_schema",
+        "fixture_name",
+        "baseline",
+        "candidate",
+        "summary_deltas",
+        "case_changes",
+    }
+    assert report["comparison_group"] == "support_ticket_classification"
+    assert report["output_schema"] == "TicketClassification"
+    assert report["baseline"]["prompt_version"] == 1
+    assert report["candidate"]["prompt_version"] == 2
+    assert report["summary_deltas"]["accuracy"] == {
+        "baseline": 1.0,
+        "candidate": 1.0,
+        "delta": 0.0,
+    }
+    assert report["summary_deltas"]["schema_validity_rate"]["delta"] == 0.0
+    assert report["summary_deltas"]["needs_review_rate"]["delta"] == 0.0
+    assert report["summary_deltas"]["tokens_per_case"]["delta"] > 0
+    assert len(report["case_changes"]) == 3
+    assert all(change["changed"] is False for change in report["case_changes"])
+    assert all(change["deltas"]["total_tokens"] > 0 for change in report["case_changes"])
 
 
 def test_ticket_classification_eval_reports_retries():
