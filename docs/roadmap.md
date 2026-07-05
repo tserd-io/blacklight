@@ -32,10 +32,20 @@ Milestone 2 is complete as an observability and guardrail hardening pass. The pr
 - public-safe synthetic fixtures with a lightweight regression check for obvious private identifiers
 - passing test, lint, observability smoke, and guardrail outcome smoke checks
 
+## Milestone 3 Completion
+
+Milestone 3 is complete as a portfolio-grade documentation pass. The project now supports:
+
+- a README that explains the platform story, quickstart, CLI/API examples, eval output, trace metrics, provider configuration, and production extension path
+- strengthened architecture docs with component responsibilities, request lifecycle, mock-provider rationale, and production plug-in points
+- tradeoff and failure-mode docs that frame MVP choices, deferred work, backend options, operating risks, mitigations, and production extensions
+- a create-your-own-workflow guide that shows how to extend the starter beyond the ticket-classifier reference implementation
+- public issue-ticket packages that separate CLI-ready release work from later business-user app productization
+- passing test, lint, documented command smoke, API smoke, public-safe data, and internal doc-link checks
+
 ## Next
 
 - Complete the public [issue ticket packages](issues/index.md):
-  - [Milestone 3: Portfolio-Grade Documentation](issues/milestone-3.md)
   - [Milestone 4: CLI-Ready Package And Release](issues/milestone-4.md)
   - [Milestone 5: Business-User App Productization](issues/milestone-5.md)
 - Add architecture screenshots or terminal examples to the README
