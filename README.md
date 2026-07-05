@@ -139,6 +139,14 @@ http://127.0.0.1:8000/sessions/demo
 
 The session page shows a timeline of workflow runs with provider, model, status, estimated cost, review outcome, and failure reason. Use the `accepted`, `needs_review`, `rejected`, and `failed` filters to review the same trace/session model exposed by `llm-platform session show`.
 
+Review outputs routed to human review:
+
+```text
+http://127.0.0.1:8000/reviews
+```
+
+The review queue lists `needs_review` and `rejected` outputs, explains why each item was routed there, and lets a reviewer record `approved`, `rejected`, or `needs_more_info` decisions. Approved items are marked as allowed for downstream work; pending, rejected, and needs-more-info items stay blocked and auditable.
+
 ## Docker Example
 
 Build the API image:
