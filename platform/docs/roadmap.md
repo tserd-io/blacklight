@@ -57,10 +57,23 @@ Milestone 4 is complete as a CLI-ready package and release-preparation pass. The
 
 Docker was not available on the local QA machine, so Docker and Ollama runtime smoke checks are recorded as a local limitation rather than a passed local check. The `v0.1.0` tag should be created only after final human approval.
 
+## Milestone 5 Completion
+
+Milestone 5 is complete as a self-explaining console and guided-demo pass. The project now supports:
+
+- a local console dashboard for workflows, runs, traces, evals, prompts, providers, review queue, settings, and docs
+- a mock-mode guided demo path that runs without live provider credentials
+- seeded synthetic demo state with linked workflow runs, traces, eval cases, prompt versions, and reviewable outputs
+- dashboard -> workflow -> run -> trace -> eval inspection paths through the console API and browser pages
+- copy-friendly CLI equivalent commands in console API payloads for major actions
+- app-managed `user.env` settings updates that stay separate from private operator-owned `.env` files
+- final QA checks for linting, tests, guided demo smoke, seeded demo smoke, console API path coverage, and CLI-equivalent command parsing
+
+Milestone 5 final QA was run on July 5, 2026. The smoke path confirmed the default `mock` provider works with `openai_configured=false` and no live provider key.
+
 ## Next
 
-- Complete the public [issue ticket packages](issues/index.md):
-  - [Milestone 5: Business-User App Productization](issues/milestone-5.md)
+- Continue into desktop productization: packaged app shell, first-run provider setup, local model management, and installer polish
 - Add architecture screenshots or terminal examples to the README
 
 ## Later

@@ -86,3 +86,32 @@ Documented limitation:
 Tag status:
 
 - `v0.1.0` was not created during this branch QA pass. Create the tag only after final human approval.
+
+### Milestone 5 Final QA Record
+
+Milestone 5 final QA was run on July 5, 2026 for the self-explaining console and guided-demo branch.
+
+Passed checks:
+
+- `ruff check .`
+- `pytest`
+- `llm-platform health`
+- `llm-platform seed demo-data --trace-db-path .tmp\milestone5-final-qa.sqlite3`
+- `llm-platform demo --verbose --trace-db-path .tmp\milestone5-final-qa.sqlite3 --session-id m5-final-demo`
+- `llm-platform session show m5-final-demo --trace-db-path .tmp\milestone5-final-qa.sqlite3`
+- `llm-platform trace show seed-demo:billing-success --trace-db-path .tmp\milestone5-final-qa.sqlite3`
+- `llm-platform eval show seed-demo-eval --trace-db-path .tmp\milestone5-final-qa.sqlite3`
+- `llm-platform prompts show ticket_classifier`
+- focused console API tests for dashboard state, workflow run, console surfaces, and CLI affordances
+- `git diff --check`
+
+Confirmed behavior:
+
+- First-run guided demo works in mock mode.
+- Seeded demo state creates linked workflow runs, traces, eval cases, and prompt versions.
+- Dashboard, workflow, run, trace, eval, prompt, provider, review queue, and settings API payloads expose copy-friendly CLI equivalents.
+- No live provider key is required for the default console/demo path; `llm-platform health` reported `provider=mock`, `openai_configured=false`, and `custom_provider_configured=false`.
+
+Documented limitation:
+
+- Browser click-through was verified through console/API regression coverage rather than a live browser automation pass on this branch.
