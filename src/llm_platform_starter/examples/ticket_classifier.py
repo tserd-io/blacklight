@@ -4,6 +4,7 @@ import hashlib
 import time
 import uuid
 
+from llm_platform_starter.errors import GuardrailValidationError
 from llm_platform_starter.guardrails.validation import validate_ticket_output
 from llm_platform_starter.models import (
     GuardrailOutcome,
@@ -108,7 +109,7 @@ class TicketClassifier:
             guardrail_outcome = validation.outcome
             if parsed is None:
                 error_category = "validation_error"
-                raise ValueError("; ".join(validation.errors))
+                raise GuardrailValidationError("; ".join(validation.errors))
             if self.idempotency_store:
                 self.idempotency_store.complete_ticket_classification(idempotency_key, parsed)
             return parsed
