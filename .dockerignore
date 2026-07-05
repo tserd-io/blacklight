@@ -1,0 +1,14 @@
+.git
+.github
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+*.egg-info
+*.pyc
+*.sqlite3
+.tmp
+build
+dist
+plans
+traces.sqlite3

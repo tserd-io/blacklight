@@ -120,6 +120,36 @@ Response:
 
 Structured API errors include `category`, `message`, `likely_cause`, and `next_step` for provider, configuration, validation, and idempotency failures.
 
+## Docker Example
+
+Build the API image:
+
+```bash
+docker build -t llm-platform-starter .
+```
+
+Run the container in default mock mode:
+
+```bash
+docker run --rm -p 8000:8000 llm-platform-starter
+```
+
+Check the API health endpoint:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Expected response:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+The image defaults to `LLM_PROVIDER=mock`, `LLM_MODEL=mock-ticket-classifier`, and `TRACE_DB_PATH=/app/data/traces.sqlite3`, so no API key or live provider is required. Override those environment variables with `docker run -e ...` when testing a real provider configuration.
+
 ## Eval Example
 
 Run deterministic evals:
