@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from llm_platform_starter import api
 from llm_platform_starter.errors import GuardrailValidationError
 from llm_platform_starter.models import GuardrailOutcome, TraceRecord
+from llm_platform_starter.observability.reviews import ReviewDecisionStore
 from llm_platform_starter.observability.storage import TraceStore
 from llm_platform_starter.providers.factory import ProviderConfigurationError
 from llm_platform_starter.providers.reliability import ProviderCallError
@@ -102,6 +103,14 @@ def _build_session_history_store(tmp_path):
     for record in records:
         store.insert(record)
     return store
+
+
+def _patch_review_stores(monkeypatch, tmp_path):
+    trace_store = _build_session_history_store(tmp_path)
+    review_store = ReviewDecisionStore(tmp_path / "traces.sqlite3")
+    monkeypatch.setattr(api, "trace_store", trace_store)
+    monkeypatch.setattr(api, "review_store", review_store)
+    return trace_store, review_store
 
 
 def test_metrics_endpoint_returns_expanded_trace_metrics(tmp_path):
@@ -226,6 +235,114 @@ def test_session_history_rejects_unknown_filter(monkeypatch, tmp_path):
 
     assert response.status_code == 400
     assert "Unknown session status filter" in response.json()["detail"]
+
+
+def test_review_queue_json_lists_pending_reviewable_outputs(monkeypatch, tmp_path):
+    _trace_store, _review_store = _patch_review_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).get("/api/reviews")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["summary"]["item_count"] == 2
+    assert payload["summary"]["pending_count"] == 2
+    assert payload["summary"]["blocked_count"] == 2
+    assert [item["request_id"] for item in payload["items"]] == ["request-3", "request-2"]
+    assert payload["items"][0]["review_status"] == "pending"
+    assert payload["items"][0]["downstream_blocked"] is True
+    assert "rejected" in payload["items"][0]["review_reason"].lower()
+    assert "human review" in payload["items"][1]["review_reason"].lower()
+
+
+def test_review_queue_page_shows_review_actions(monkeypatch, tmp_path):
+    _trace_store, _review_store = _patch_review_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).get("/reviews")
+
+    assert response.status_code == 200
+    assert "Business Review Queue" in response.text
+    assert "request-2" in response.text
+    assert "request-3" in response.text
+    assert "Approve" in response.text
+    assert "Reject" in response.text
+    assert "Needs More Info" in response.text
+    assert "Blocked" in response.text
+
+
+def test_review_decision_json_persists_auditable_decision(monkeypatch, tmp_path):
+    _trace_store, review_store = _patch_review_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).post(
+        "/api/reviews/request-2",
+        json={
+            "decision": "approved",
+            "reviewer": "Avery",
+            "notes": "Synthetic billing ticket is safe to automate.",
+        },
+    )
+    payload = response.json()
+    stored = review_store.get("request-2")
+
+    assert response.status_code == 200
+    assert payload["decision"]["decision"] == "approved"
+    assert payload["downstream_blocked"] is False
+    assert stored["reviewer"] == "Avery"
+    assert stored["notes"] == "Synthetic billing ticket is safe to automate."
+
+    queue_response = TestClient(api.app).get("/api/reviews")
+    queue_payload = queue_response.json()
+    assert [item["request_id"] for item in queue_payload["items"]] == ["request-3"]
+
+    decided_response = TestClient(api.app).get("/api/reviews?include_decided=true")
+    decided_payload = decided_response.json()
+    approved_item = next(item for item in decided_payload["items"] if item["request_id"] == "request-2")
+    assert approved_item["review_status"] == "approved"
+    assert approved_item["downstream_blocked"] is False
+
+
+def test_review_decision_page_form_persists_rejection(monkeypatch, tmp_path):
+    _trace_store, review_store = _patch_review_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).post(
+        "/reviews/request-3",
+        data={
+            "decision": "rejected",
+            "reviewer": "Morgan",
+            "notes": "Rejected output stays blocked.",
+        },
+        follow_redirects=False,
+    )
+    stored = review_store.get("request-3")
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/reviews?include_decided=true"
+    assert stored["decision"] == "rejected"
+    assert stored["reviewer"] == "Morgan"
+    assert stored["notes"] == "Rejected output stays blocked."
+
+
+def test_review_decision_rejects_non_reviewable_trace(monkeypatch, tmp_path):
+    _trace_store, _review_store = _patch_review_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).post(
+        "/api/reviews/request-1",
+        json={"decision": "approved"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Trace is not reviewable."
+
+
+def test_review_decision_rejects_unknown_decision(monkeypatch, tmp_path):
+    _trace_store, _review_store = _patch_review_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).post(
+        "/api/reviews/request-2",
+        json={"decision": "escalated"},
+    )
+
+    assert response.status_code == 400
+    assert "Unknown review decision" in response.json()["detail"]
 
 
 def test_classify_endpoint_returns_structured_validation_errors():

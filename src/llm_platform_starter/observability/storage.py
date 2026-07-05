@@ -154,6 +154,25 @@ class TraceStore:
             ).fetchall()
         return [self._row_to_dict(row) for row in rows]
 
+    def list_reviewable(self, limit: int = 100) -> list[dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT
+                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  prompt_version, provider, model, latency_ms, input_tokens,
+                  output_tokens, estimated_cost_usd, validation_passed,
+                  guardrail_outcome, error_category
+                FROM traces
+                WHERE guardrail_outcome IN ('needs_review', 'rejected')
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
     def _initialize(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.db_path) as conn:
