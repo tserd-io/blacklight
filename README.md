@@ -1,3 +1,5 @@
+![Blacklight Studio logo](platform/docs/assets/blacklight-studio-readme-logo.png)
+
 # LLM Platform Starter
 
 A compact portfolio project for a local, self-explaining LLM workflow platform.
