@@ -241,6 +241,7 @@ def test_console_surfaces_render_navigation_and_cli_equivalents(monkeypatch, tmp
     _patch_seeded_console_stores(monkeypatch, tmp_path)
     client = TestClient(api.app)
     expected = {
+        "/console/first-run": "First Run",
         "/console/workflows": "blacklight classify",
         "/console/runs": "blacklight session show",
         "/console/traces": "blacklight trace list",
@@ -290,6 +291,7 @@ def test_console_api_dashboard_returns_first_run_state(monkeypatch, tmp_path):
     assert payload["providers"][0]["provider"] == "mock"
     assert payload["local_model"]["status"] == "unavailable"
     assert payload["local_model"]["cli_command"] == "blacklight local-model status"
+    assert payload["first_run"]["modes"][0]["mode"] == "demo"
     assert payload["settings"]["trace_db_path"].endswith("console.sqlite3")
     assert "blacklight demo --verbose" in payload["cli"]["guided_demo"]
     assert "blacklight seed demo-data" in payload["cli"]["seed_demo_data"]
@@ -327,6 +329,7 @@ def test_console_api_surfaces_return_state_and_cli(monkeypatch, tmp_path):
     client = TestClient(api.app)
     endpoints = [
         ("/api/console/workflows", "workflows"),
+        ("/api/console/first-run", "modes"),
         ("/api/console/workflows/ticket_classifier", "workflow"),
         ("/api/console/runs", "runs"),
         ("/api/console/runs/seed-demo", "traces"),
@@ -567,6 +570,94 @@ def test_console_settings_update_keeps_api_available_when_provider_extra_is_miss
     assert payload["settings"]["provider"] == "openai"
     assert startup_error is not None
     assert "openai extra" in str(startup_error)
+
+
+def test_console_first_run_payload_explains_modes_without_jargon(monkeypatch, tmp_path):
+    _patch_seeded_console_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).get("/api/console/first-run")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["title"] == "First-run provider setup"
+    assert {mode["mode"] for mode in payload["modes"]} == {
+        "demo",
+        "hosted_provider",
+        "local_model",
+    }
+    hosted = next(mode for mode in payload["modes"] if mode["mode"] == "hosted_provider")
+    local = next(mode for mode in payload["modes"] if mode["mode"] == "local_model")
+
+    assert hosted["plain_language"]["cost"] == "Usage may create token charges."
+    assert hosted["readiness_label"] == "Needs private provider key"
+    assert "private environment" in hosted["recovery_steps"][0]
+    assert local["settings"]["LLM_CUSTOM_PROVIDER"].endswith("OllamaProvider")
+    assert "Check Local Model status" in local["recovery_steps"][2]
+
+
+def test_console_first_run_save_writes_local_model_settings_without_secrets(
+    monkeypatch,
+    tmp_path,
+):
+    original_state = (
+        api.settings,
+        api.trace_store,
+        api.idempotency_store,
+        api.eval_store,
+        api.review_store,
+        api.classifier,
+        api.classifier_startup_error,
+    )
+    user_env_path = tmp_path / "user.env"
+    monkeypatch.setenv("BLACKLIGHT_USER_ENV_PATH", str(user_env_path))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(api, "local_model_status", lambda _settings: StaticLocalModelStatus())
+
+    try:
+        response = TestClient(api.app).post(
+            "/api/console/first-run",
+            json={
+                "mode": "local_model",
+                "model": "llama3.1",
+                "ollama_base_url": "http://localhost:11434",
+            },
+        )
+        payload = response.json()
+        written = user_env_path.read_text(encoding="utf-8")
+    finally:
+        (
+            api.settings,
+            api.trace_store,
+            api.idempotency_store,
+            api.eval_store,
+            api.review_store,
+            api.classifier,
+            api.classifier_startup_error,
+        ) = original_state
+
+    assert response.status_code == 200
+    assert payload["mode"] == "local_model"
+    assert payload["updated_keys"] == [
+        "LLM_CUSTOM_PROVIDER",
+        "LLM_MODEL",
+        "LLM_PROVIDER",
+        "OLLAMA_BASE_URL",
+    ]
+    assert "LLM_PROVIDER=custom" in written
+    assert "LLM_CUSTOM_PROVIDER=blacklight.providers.ollama_provider:OllamaProvider" in written
+    assert "OPENAI_API_KEY" not in written
+
+
+def test_console_first_run_save_rejects_unknown_mode(monkeypatch, tmp_path):
+    monkeypatch.setenv("BLACKLIGHT_USER_ENV_PATH", str(tmp_path / "user.env"))
+
+    response = TestClient(api.app).post(
+        "/api/console/first-run",
+        json={"mode": "mystery"},
+    )
+
+    assert response.status_code == 400
+    assert "Choose demo, hosted_provider, or local_model" in response.json()["detail"]
 
 
 def test_session_history_json_returns_filtered_session_timeline(monkeypatch, tmp_path):

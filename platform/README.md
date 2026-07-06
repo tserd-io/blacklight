@@ -396,6 +396,14 @@ blacklight local-model status
 
 The status reports whether the local runtime is selected, loading, ready, or unavailable, lists installed local models when Ollama is reachable, and shows whether a local fallback model is ready. Model weights are not bundled into the repo; a later installer can add a first-run download flow with explicit disk, license, hardware, quality, and support tradeoffs. Hosted provider keys such as `OPENAI_API_KEY` should stay in `.env`, shell environment variables, or deployment secrets rather than app-editable `user.env`.
 
+The console also includes a first-run setup path:
+
+```text
+http://127.0.0.1:8000/console/first-run
+```
+
+The first-run setup offers demo mode, hosted provider mode, and local model mode in business-friendly terms: privacy, cost, quality, readiness, and recovery steps. It writes only non-secret app settings to `user.env`; hosted provider keys remain private environment or deployment secrets.
+
 ## Guardrails And Review Routing
 
 Guardrails treat validation as a routing decision:

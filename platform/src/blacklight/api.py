@@ -14,7 +14,12 @@ from pydantic import BaseModel
 from blacklight.errors import GuardrailValidationError, describe_exception, session_not_found_error
 from blacklight.evals.runner import run_ticket_classification_eval
 from blacklight.examples.ticket_classifier import TicketClassifier
-from blacklight.local_models import local_model_status
+from blacklight.local_models import (
+    DEFAULT_LOCAL_MODEL,
+    DEFAULT_OLLAMA_BASE_URL,
+    OLLAMA_PROVIDER_PATH,
+    local_model_status,
+)
 from blacklight.models import TicketClassification, TicketRequest
 from blacklight.observability.idempotency import (
     IdempotencyInProgressError,
@@ -50,6 +55,7 @@ classifier_startup_error: ProviderConfigurationError | None = None
 
 CONSOLE_NAV = [
     ("dashboard", "Dashboard", "/console"),
+    ("first-run", "First Run", "/console/first-run"),
     ("workflows", "Workflows", "/console/workflows"),
     ("runs", "Runs", "/console/runs"),
     ("traces", "Traces", "/console/traces"),
@@ -83,6 +89,12 @@ class ConsoleEvalRunRequest(BaseModel):
 
 class ConsoleSettingsUpdateRequest(BaseModel):
     settings: dict[str, Any]
+
+
+class ConsoleFirstRunSetupRequest(BaseModel):
+    mode: str
+    model: str | None = None
+    ollama_base_url: str | None = None
 
 
 def _build_classifier() -> TicketClassifier:
@@ -511,6 +523,129 @@ def _local_model_payload() -> dict[str, Any]:
     return status
 
 
+def _first_run_mode_payloads() -> list[dict[str, Any]]:
+    provider_status = {
+        item["provider"]: item
+        for item in [_provider_payload(provider) for provider in ["mock", "openai", "custom"]]
+    }
+    local_model = _local_model_payload()
+    hosted_ready = provider_status["openai"]["configured"]
+    local_ready = bool(local_model["ready"] or local_model["fallback"]["configured"])
+    return [
+        {
+            "mode": "demo",
+            "label": "Demo mode",
+            "business_goal": "Try Blacklight safely with synthetic examples and no live model.",
+            "plain_language": {
+                "privacy": "Uses local synthetic data only.",
+                "cost": "No provider bill.",
+                "quality": "Good for learning the workflow; not a real model-quality test.",
+            },
+            "settings": {
+                "LLM_PROVIDER": "mock",
+                "LLM_MODEL": "mock-ticket-classifier",
+            },
+            "ready": True,
+            "readiness_label": "Ready now",
+            "recovery_steps": [],
+        },
+        {
+            "mode": "hosted_provider",
+            "label": "Hosted provider",
+            "business_goal": "Use an approved provider key for stronger model quality.",
+            "plain_language": {
+                "privacy": "Prompts may be sent to the approved hosted provider.",
+                "cost": "Usage may create token charges.",
+                "quality": "Usually the strongest first production option.",
+            },
+            "settings": {
+                "LLM_PROVIDER": "openai",
+                "LLM_MODEL": settings.model if settings.provider == "openai" else "gpt-4o-mini",
+            },
+            "ready": hosted_ready,
+            "readiness_label": "Ready" if hosted_ready else "Needs private provider key",
+            "recovery_steps": [
+                "Add the hosted provider key to the private environment or deployment secrets.",
+                "Keep provider keys out of app-editable user.env.",
+                "Return here and choose hosted provider again after the key is available.",
+            ],
+        },
+        {
+            "mode": "local_model",
+            "label": "Local model",
+            "business_goal": "Run with a local/private model when data control matters.",
+            "plain_language": {
+                "privacy": "Can keep prompts on this machine or private network.",
+                "cost": "Avoids per-token provider charges but may require hardware and downloads.",
+                "quality": "Depends on the selected local model and available hardware.",
+            },
+            "settings": {
+                "LLM_PROVIDER": "custom",
+                "LLM_CUSTOM_PROVIDER": OLLAMA_PROVIDER_PATH,
+                "LLM_MODEL": DEFAULT_LOCAL_MODEL,
+                "OLLAMA_BASE_URL": local_model["base_url"] or DEFAULT_OLLAMA_BASE_URL,
+            },
+            "ready": local_ready,
+            "readiness_label": "Ready" if local_ready else "Needs local runtime or model",
+            "recovery_steps": [
+                "Start the local model runtime.",
+                f"Install a model such as {DEFAULT_LOCAL_MODEL}.",
+                "Check Local Model status before running a workflow.",
+            ],
+        },
+    ]
+
+
+def _first_run_payload() -> dict[str, Any]:
+    payload = {
+        "title": "First-run provider setup",
+        "summary": "Choose demo, hosted provider, or local model mode before running workflows.",
+        "active_provider": settings.provider,
+        "active_model": settings.model,
+        "modes": _first_run_mode_payloads(),
+        "links": {
+            "console": "/console/first-run",
+            "settings": "/console/settings",
+            "providers": "/console/providers",
+            "local_model": "/console/local-model",
+        },
+    }
+    payload.update(
+        _cli_affordance(
+            "blacklight health",
+            health="blacklight health",
+            local_model="blacklight local-model status",
+            demo="blacklight demo --verbose",
+        )
+    )
+    return payload
+
+
+def _first_run_updates(request: ConsoleFirstRunSetupRequest) -> dict[str, str]:
+    mode = request.mode
+    if mode == "demo":
+        return {
+            "LLM_PROVIDER": "mock",
+            "LLM_MODEL": "mock-ticket-classifier",
+        }
+    if mode == "hosted_provider":
+        return {
+            "LLM_PROVIDER": "openai",
+            "LLM_MODEL": request.model or "gpt-4o-mini",
+        }
+    if mode == "local_model":
+        return {
+            "LLM_PROVIDER": "custom",
+            "LLM_CUSTOM_PROVIDER": OLLAMA_PROVIDER_PATH,
+            "LLM_MODEL": request.model or DEFAULT_LOCAL_MODEL,
+            "OLLAMA_BASE_URL": request.ollama_base_url or DEFAULT_OLLAMA_BASE_URL,
+        }
+    raise HTTPException(
+        status_code=400,
+        detail="Choose demo, hosted_provider, or local_model setup mode.",
+    )
+
+
 def _editable_settings_catalog() -> list[dict[str, Any]]:
     definitions = {
         "LLM_PROVIDER": ("Provider", "provider", "select", ["mock", "openai", "custom"]),
@@ -623,9 +758,11 @@ def _dashboard_payload(limit: int = 5) -> dict[str, Any]:
         "workflows": [_workflow_payload()],
         "providers": [_provider_payload(provider) for provider in ["mock", "openai", "custom"]],
         "local_model": _local_model_payload(),
+        "first_run": _first_run_payload(),
         "settings": _settings_payload(),
         "links": {
             "console": "/console",
+            "first_run": "/api/console/first-run",
             "workflows": "/api/console/workflows",
             "runs": "/api/console/runs",
             "traces": "/api/console/traces",
@@ -689,6 +826,50 @@ def _render_console_dashboard() -> HTMLResponse:
   <tbody>{eval_rows}</tbody>
 </table>"""
     return _console_shell(active="dashboard", title="Dashboard", body=body)
+
+
+def _render_console_first_run() -> HTMLResponse:
+    payload = _first_run_payload()
+    cards = []
+    for mode in payload["modes"]:
+        status_class = "ready" if mode["ready"] else "pending"
+        steps = "".join(f"<li>{escape(step)}</li>" for step in mode["recovery_steps"])
+        if not steps:
+            steps = "<li>No setup work needed.</li>"
+        settings_rows = "".join(
+            (
+                f'<tr><td data-label="Setting">{escape(key)}</td>'
+                f'<td data-label="Value"><code>{escape(value)}</code></td></tr>'
+            )
+            for key, value in mode["settings"].items()
+        )
+        cards.append(
+            f"""
+<section class="panel">
+  <h2>{escape(mode["label"])}</h2>
+  <p>{escape(mode["business_goal"])}</p>
+  <p><span class="status {status_class}">{escape(mode["readiness_label"])}</span></p>
+  <table>
+    <tbody>
+      <tr><td data-label="Mode">Privacy</td><td data-label="Details">{escape(mode["plain_language"]["privacy"])}</td></tr>
+      <tr><td data-label="Mode">Cost</td><td data-label="Details">{escape(mode["plain_language"]["cost"])}</td></tr>
+      <tr><td data-label="Mode">Quality</td><td data-label="Details">{escape(mode["plain_language"]["quality"])}</td></tr>
+    </tbody>
+  </table>
+  <h2>Saved Settings</h2>
+  <table><tbody>{settings_rows}</tbody></table>
+  <h2>Recovery Steps</h2>
+  <ul>{steps}</ul>
+</section>"""
+        )
+    body = f"""
+<h1>First Run</h1>
+<p class="muted">Choose demo, hosted provider, or local model mode before running workflows.</p>
+<section class="grid">
+  {''.join(cards)}
+  {_console_command_panel("blacklight health")}
+</section>"""
+    return _console_shell(active="first-run", title="First Run", body=body)
 
 
 def _console_trace_row(trace: dict[str, Any]) -> str:
@@ -1263,6 +1444,11 @@ def console_dashboard() -> HTMLResponse:
     return _render_console_dashboard()
 
 
+@app.get("/console/first-run", response_class=HTMLResponse)
+def console_first_run() -> HTMLResponse:
+    return _render_console_first_run()
+
+
 @app.post("/console/run-demo", response_class=HTMLResponse)
 def console_run_demo() -> HTMLResponse:
     return _render_console_demo_result(_run_console_demo())
@@ -1326,6 +1512,30 @@ def console_dashboard_json(limit: int = Query(default=5, ge=1, le=50)) -> dict[s
 @app.get("/api/console/dashboard")
 def console_dashboard_json_alias(limit: int = Query(default=5, ge=1, le=50)) -> dict[str, Any]:
     return _dashboard_payload(limit=limit)
+
+
+@app.get("/api/console/first-run")
+def console_first_run_json() -> dict[str, Any]:
+    return _first_run_payload()
+
+
+@app.post("/api/console/first-run")
+def console_first_run_save_json(request: ConsoleFirstRunSetupRequest) -> dict[str, Any]:
+    updates = _first_run_updates(request)
+    try:
+        write_user_env(updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _reload_runtime_settings()
+    payload = {
+        "message": "Saved first-run setup without editing private provider secrets.",
+        "mode": request.mode,
+        "updated_keys": sorted(updates),
+        "first_run": _first_run_payload(),
+        "settings": _settings_payload(),
+    }
+    payload.update(_cli_affordance("blacklight health", health="blacklight health"))
+    return payload
 
 
 @app.get("/api/console/workflows")
