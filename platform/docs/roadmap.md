@@ -71,10 +71,23 @@ Milestone 5 is complete as a self-explaining console and guided-demo pass. The p
 
 Milestone 5 final QA was run on July 5, 2026. The smoke path confirmed the default `mock` provider works with `openai_configured=false` and no live provider key.
 
+## Milestone 6 Completion
+
+Milestone 6 is complete as a business-user productization approval pass. The project now supports:
+
+- web-first app shell packaging guidance, with the browser web app as the enterprise default and an optional Windows/Linux desktop shell for local/private use
+- app and installer icon source assets, startup/readiness routes, first-run modes, and provider-key bypass assumptions captured in `packaging/app-shell.json`
+- a first-run provider setup path for demo mode, hosted provider mode, and local model mode
+- local model status and fallback guidance that keeps provider secrets in private environment settings and keeps model weights out of the repo
+- business-user console surfaces for dashboard, workflow runs, session history, traces, evals, prompts, providers, settings, local model status, first-run setup, and review queue
+- final QA checks for linting, tests, app-shell packaging tests, first-run setup tests, local model behavior, guided demo smoke, console API smoke, CLI health, tracked-file hygiene, and whitespace checks
+
+Milestone 6 final QA was run on July 6, 2026. Docker and live Ollama runtime smoke checks remain environment-dependent; the local QA pass verified configuration, status reporting, and recovery guidance without downloading model weights or requiring live provider credentials.
+
 ## Next
 
-- Continue into web-first app productization: managed browser deployment as the enterprise default, with an optional packaged desktop shell for local/private use
-- Package the optional Blacklight Studio desktop shell for Windows and Linux first, using the documented app shell manifest and deferring macOS until signing/notarization choices are clearer
+- Prepare the productization branch for pull-request review and approval
+- Decide whether the next release should stay CLI/package focused or include the web-first console and app-shell documentation
 - Add architecture screenshots or terminal examples to the README
 
 ## Later
@@ -83,4 +96,5 @@ Milestone 5 final QA was run on July 5, 2026. The smoke path confirmed the defau
 - Add OpenTelemetry export
 - Add RAG policy-question example
 - Add deployment notes for container platforms
-- Explore a managed browser web app with enterprise deployment controls, plus an optional desktop installer with app icon, first-run setup, local model management, and hosted-provider fallback
+- Add managed enterprise deployment controls for the browser web app
+- Package the optional desktop shell with signing, update, installer, and fleet-managed desktop deployment hardening

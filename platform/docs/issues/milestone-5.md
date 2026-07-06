@@ -156,3 +156,36 @@ Suggested labels:
 - `guardrails`
 - `usability`
 - `enhancement`
+
+## Candidate. Milestone 6 Final QA And Productization Approval
+
+Purpose:
+Confirm desktop/business-user productization is coherent and ready after the self-explaining console exists.
+
+Tasks:
+
+- Verify app-shell packaging guidance and manifest coverage.
+- Verify first-run provider setup.
+- Verify local model management behavior and docs.
+- Verify business-user session and review surfaces.
+- Confirm developer CLI/API paths still work.
+- Confirm no secrets, local model artifacts, generated caches, or private plans are tracked.
+
+Acceptance criteria:
+
+- Desktop/app productization smoke checks pass or limitations are documented.
+- First-run setup is understandable for non-developer users.
+- CLI/API workflows still pass regression tests.
+- Milestone 6 completion notes are added to roadmap or release notes.
+
+Implemented scope:
+
+- Record Milestone 6 completion notes in the roadmap and release notes.
+- Run linting, full tests, CLI health, guided demo, local model status, console API smoke checks, tracked-file hygiene scan, and whitespace checks.
+- Document that live Docker/Ollama model installation remains an opt-in environment-specific validation step.
+
+Suggested labels:
+
+- `qa`
+- `release`
+- `usability`
