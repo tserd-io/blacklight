@@ -73,6 +73,18 @@ def test_process_env_takes_precedence_over_user_env(monkeypatch, tmp_path):
     assert settings.model == "process-env-model"
 
 
+def test_private_provider_key_is_loaded_only_from_process_env(monkeypatch, tmp_path):
+    user_env_path = tmp_path / "user.env"
+    user_env_path.write_text("OPENAI_API_KEY=sk-user-env-secret\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    assert load_settings(user_env_path).openai_api_key is None
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-private-process-secret")
+
+    assert load_settings(user_env_path).openai_api_key == "sk-private-process-secret"
+
+
 def test_write_user_env_preserves_private_unknown_lines_and_rejects_unknown_settings(tmp_path):
     user_env_path = tmp_path / "user.env"
     user_env_path.write_text(
@@ -100,13 +112,19 @@ def test_write_user_env_preserves_private_unknown_lines_and_rejects_unknown_sett
     with pytest.raises(ValueError, match="Unsupported user.env setting"):
         write_user_env({"SHELL": "powershell"}, user_env_path)
 
+    with pytest.raises(ValueError, match="Unsupported user.env setting"):
+        write_user_env({"OPENAI_API_KEY": "sk-secret"}, user_env_path)
+
 
 def test_write_user_env_removes_keys_with_none_value(tmp_path):
     user_env_path = tmp_path / "user.env"
-    user_env_path.write_text("LLM_PROVIDER=mock\nOPENAI_API_KEY=sk-old\n", encoding="utf-8")
+    user_env_path.write_text(
+        "LLM_PROVIDER=mock\nOLLAMA_BASE_URL=http://localhost:11434\n",
+        encoding="utf-8",
+    )
 
-    write_user_env({"OPENAI_API_KEY": None}, user_env_path)
+    write_user_env({"OLLAMA_BASE_URL": None}, user_env_path)
 
     values = load_user_env(user_env_path)
-    assert "OPENAI_API_KEY" not in values
+    assert "OLLAMA_BASE_URL" not in values
     assert "LLM_PROVIDER" in values

@@ -388,6 +388,14 @@ set OLLAMA_BASE_URL=http://localhost:11434
 
 Local model servers such as Ollama, LM Studio, llama.cpp, vLLM, or a private localhost endpoint can use the same custom provider path. See [docs/provider-configuration.md](docs/provider-configuration.md).
 
+Blacklight exposes local model readiness through the console and CLI:
+
+```bash
+blacklight local-model status
+```
+
+The status reports whether the local runtime is selected, loading, ready, or unavailable, lists installed local models when Ollama is reachable, and shows whether a local fallback model is ready. Model weights are not bundled into the repo; a later installer can add a first-run download flow with explicit disk, license, hardware, quality, and support tradeoffs. Hosted provider keys such as `OPENAI_API_KEY` should stay in `.env`, shell environment variables, or deployment secrets rather than app-editable `user.env`.
+
 ## Guardrails And Review Routing
 
 Guardrails treat validation as a routing decision:

@@ -19,6 +19,7 @@ from blacklight.evals.runner import (
     run_ticket_classification_eval,
 )
 from blacklight.examples.ticket_classifier import TicketClassifier
+from blacklight.local_models import local_model_status
 from blacklight.models import TicketRequest
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.idempotency import IdempotencyStore
@@ -257,6 +258,12 @@ def health(_args: argparse.Namespace) -> int:
     return 0
 
 
+def local_model_status_command(_args: argparse.Namespace) -> int:
+    settings = load_settings()
+    _print_json(local_model_status(settings).as_dict())
+    return 0
+
+
 def prompts_list(_args: argparse.Namespace) -> int:
     prompts = PromptRegistry().list()
     _print_json(
@@ -481,6 +488,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     health_parser = subparsers.add_parser("health", help="Print local runtime configuration.")
     health_parser.set_defaults(func=health)
+
+    local_model_parser = subparsers.add_parser(
+        "local-model",
+        help="Inspect local model runtime readiness.",
+    )
+    local_model_subparsers = local_model_parser.add_subparsers(
+        dest="local_model_command",
+        required=True,
+    )
+    local_model_status_parser = local_model_subparsers.add_parser(
+        "status",
+        help="Show local model installed/loading/ready/unavailable status.",
+    )
+    local_model_status_parser.set_defaults(func=local_model_status_command)
 
     seed_parser = subparsers.add_parser("seed", help="Load synthetic mock-mode demo data.")
     seed_subparsers = seed_parser.add_subparsers(dest="seed_command", required=True)

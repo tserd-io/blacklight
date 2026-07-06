@@ -251,6 +251,20 @@ def test_health_command_prints_runtime_config(capsys):
     assert payload["provider_rate_limit_window_seconds"] == 10.0
 
 
+def test_local_model_status_command_prints_readiness(capsys, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://example.com")
+
+    exit_code = main(["local-model", "status"])
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["runtime"] == "ollama"
+    assert payload["status"] == "unavailable"
+    assert payload["ready"] is False
+    assert payload["fallback"]["configured"] is False
+
+
 def test_prompts_list_command_prints_prompt_metadata(capsys):
     exit_code = main(["prompts", "list"])
 

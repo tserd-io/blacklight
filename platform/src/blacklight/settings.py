@@ -13,7 +13,6 @@ USER_EDITABLE_ENV_KEYS = {
     "LLM_PROVIDER",
     "LLM_MODEL",
     "TRACE_DB_PATH",
-    "OPENAI_API_KEY",
     "LLM_CUSTOM_PROVIDER",
     "OLLAMA_BASE_URL",
     "LLM_PROVIDER_TIMEOUT_SECONDS",
@@ -106,7 +105,7 @@ def load_settings(user_env_path: str | Path | None = None) -> Settings:
         provider=_setting("LLM_PROVIDER", "mock", user_env),
         model=_setting("LLM_MODEL", "mock-ticket-classifier", user_env),
         trace_db_path=_setting("TRACE_DB_PATH", "traces.sqlite3", user_env),
-        openai_api_key=_setting("OPENAI_API_KEY", "", user_env) or None,
+        openai_api_key=os.getenv("OPENAI_API_KEY") or None,
         custom_provider_path=_setting("LLM_CUSTOM_PROVIDER", "", user_env) or None,
         ollama_base_url=_setting("OLLAMA_BASE_URL", "http://localhost:11434", user_env),
         provider_timeout_seconds=float(

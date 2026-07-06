@@ -30,6 +30,47 @@ class ProviderFailureClassifier:
         )
 
 
+class StaticLocalModelStatus:
+    def as_dict(self):
+        return {
+            "runtime": "ollama",
+            "model": "llama3.1",
+            "base_url": "http://localhost:11434",
+            "provider_path": "blacklight.providers.ollama_provider:OllamaProvider",
+            "configured": False,
+            "selected": False,
+            "installed": False,
+            "available_models": [],
+            "loading": False,
+            "ready": False,
+            "unavailable": True,
+            "status": "unavailable",
+            "status_message": "Local fallback model is not installed.",
+            "start_command": "docker compose -f docker-compose.ollama.yml up -d",
+            "install_command": "docker compose -f docker-compose.ollama.yml exec ollama ollama pull llama3.1",
+            "fallback": {
+                "type": "local_model",
+                "configured": False,
+                "provider": "ollama",
+                "model": "llama3.1",
+                "message": "Local model fallback is unavailable.",
+                "hosted_provider": {
+                    "configured": False,
+                    "provider": None,
+                    "secret_source": "private_environment",
+                    "message": "Hosted provider credentials are not configured.",
+                },
+            },
+            "tradeoffs": {
+                "privacy_control": "Local inference can keep prompts on the user's machine.",
+                "package_size": "First-run downloads keep the app smaller.",
+                "hardware": "Local models depend on hardware.",
+                "quality": "Smaller local models may need review.",
+                "support": "A managed app should show model status.",
+            },
+        }
+
+
 def _assert_cli_command_parseable(command: str) -> None:
     assert command.startswith("blacklight ")
     assert "<" not in command
@@ -134,6 +175,7 @@ def _patch_seeded_console_stores(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "trace_store", trace_store)
     monkeypatch.setattr(api, "eval_store", eval_store)
     monkeypatch.setattr(api, "review_store", review_store)
+    monkeypatch.setattr(api, "local_model_status", lambda _settings: StaticLocalModelStatus())
     monkeypatch.setattr(api, "settings", replace(api.settings, trace_db_path=str(db_path)))
     return trace_store, eval_store, review_store
 
@@ -205,6 +247,7 @@ def test_console_surfaces_render_navigation_and_cli_equivalents(monkeypatch, tmp
         "/console/evals": "blacklight eval list",
         "/console/prompts": "blacklight prompts list",
         "/console/providers": "blacklight health",
+        "/console/local-model": "blacklight local-model status",
         "/console/review": "Review Queue",
         "/console/settings": "blacklight health",
         "/console/docs": "Docs And Recipes",
@@ -245,6 +288,8 @@ def test_console_api_dashboard_returns_first_run_state(monkeypatch, tmp_path):
     assert payload["review_queue"]["pending_count"] >= 1
     assert payload["workflows"][0]["workflow_id"] == "ticket_classifier"
     assert payload["providers"][0]["provider"] == "mock"
+    assert payload["local_model"]["status"] == "unavailable"
+    assert payload["local_model"]["cli_command"] == "blacklight local-model status"
     assert payload["settings"]["trace_db_path"].endswith("console.sqlite3")
     assert "blacklight demo --verbose" in payload["cli"]["guided_demo"]
     assert "blacklight seed demo-data" in payload["cli"]["seed_demo_data"]
@@ -292,6 +337,7 @@ def test_console_api_surfaces_return_state_and_cli(monkeypatch, tmp_path):
         ("/api/console/prompts", "prompts"),
         ("/api/console/prompts/ticket_classifier", "prompt"),
         ("/api/console/providers", "providers"),
+        ("/api/console/local-model", "runtime"),
         ("/api/console/reviews", "items"),
         ("/api/console/settings", "provider"),
     ]
@@ -378,7 +424,10 @@ def test_console_api_cli_affordances_include_prompt_compare_and_review_queue(mon
         _assert_cli_command_parseable(command)
 
 
-def test_console_settings_update_writes_user_env_without_exposing_secrets(monkeypatch, tmp_path):
+def test_console_settings_update_writes_user_env_without_editing_private_keys(
+    monkeypatch,
+    tmp_path,
+):
     original_state = (
         api.settings,
         api.trace_store,
@@ -395,10 +444,10 @@ def test_console_settings_update_writes_user_env_without_exposing_secrets(monkey
         "LLM_PROVIDER",
         "LLM_MODEL",
         "TRACE_DB_PATH",
-        "OPENAI_API_KEY",
         "LLM_CUSTOM_PROVIDER",
     ]:
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-private-process-secret")
 
     try:
         response = TestClient(api.app).patch(
@@ -407,7 +456,6 @@ def test_console_settings_update_writes_user_env_without_exposing_secrets(monkey
                 "settings": {
                     "LLM_PROVIDER": "openai",
                     "LLM_MODEL": "gpt-4o-mini",
-                    "OPENAI_API_KEY": "sk-test-secret",
                     "TRACE_DB_PATH": str(tmp_path / "updated.sqlite3"),
                 }
             },
@@ -429,14 +477,13 @@ def test_console_settings_update_writes_user_env_without_exposing_secrets(monkey
     assert payload["updated_keys"] == [
         "LLM_MODEL",
         "LLM_PROVIDER",
-        "OPENAI_API_KEY",
         "TRACE_DB_PATH",
     ]
     assert payload["settings"]["openai_configured"] is True
-    assert payload["settings"]["user_env"]["managed_keys"]["OPENAI_API_KEY"]["value"] == "***"
-    assert "sk-test-secret" not in str(payload)
+    assert "OPENAI_API_KEY" not in payload["settings"]["user_env"]["managed_keys"]
+    assert "sk-private-process-secret" not in str(payload)
     assert "PRIVATE_NOTE=keep" in written
-    assert "OPENAI_API_KEY=sk-test-secret" in written
+    assert "OPENAI_API_KEY" not in written
     assert payload["message"].endswith("The private .env file was not touched.")
 
 
@@ -487,6 +534,7 @@ def test_console_settings_update_keeps_api_available_when_provider_extra_is_miss
     )
     monkeypatch.setenv("BLACKLIGHT_USER_ENV_PATH", str(tmp_path / "user.env"))
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-private-process-secret")
 
     def missing_provider_extra(_settings):
         raise RuntimeError("Install the openai extra to use OpenAIProvider.")
@@ -499,7 +547,6 @@ def test_console_settings_update_keeps_api_available_when_provider_extra_is_miss
             json={
                 "settings": {
                     "LLM_PROVIDER": "openai",
-                    "OPENAI_API_KEY": "sk-test-secret",
                 }
             },
         )
