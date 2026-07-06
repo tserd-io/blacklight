@@ -397,15 +397,13 @@ blacklight local-model status
 
 The status reports whether the local runtime is selected, loading, ready, or unavailable, lists installed local models when Ollama is reachable, and shows whether a local fallback model is ready. Model weights are not bundled into the repo; a later installer can add a first-run download flow with explicit disk, license, hardware, quality, and support tradeoffs. Hosted provider keys such as `OPENAI_API_KEY` should stay in `.env`, shell environment variables, or deployment secrets rather than app-editable `user.env`.
 
-## App Shell Packaging Direction
+The console also includes a first-run setup path:
 
-The enterprise product direction is web-first: the most serviceable deployment is a browser web app served from managed infrastructure. The desktop shell is an optional local/private packaging layer for demos, offline/private operation, or local model setup.
+```text
+http://127.0.0.1:8000/console/first-run
+```
 
-Either deployment should still behave like a clickable application: a Blacklight Studio icon, shortcut, browser app, or Linux desktop entry should open the managed web app or local console without requiring the user to start from a terminal.
-
-The desktop packaging direction is Windows and Linux first, with macOS treated as a future packaging target. The app icon asset is `packaging/assets/blacklight-studio-icon-clean-square-hires.png`; the installer icon asset is `packaging/assets/blacklight-studio-icon-flashlight-ring-clean-square-hires.png`.
-
-The installer should explain that local model setup may require administrator permissions because it can install/configure a local model runtime and download model files. Users who already have an approved hosted provider key or configured endpoint should be able to skip local model setup and validate that provider instead. See [docs/desktop-packaging.md](docs/desktop-packaging.md).
+The first-run setup offers demo mode, hosted provider mode, and local model mode in business-friendly terms: privacy, cost, quality, readiness, and recovery steps. It writes only non-secret app settings to `user.env`; hosted provider keys remain private environment or deployment secrets.
 
 ## Guardrails And Review Routing
 

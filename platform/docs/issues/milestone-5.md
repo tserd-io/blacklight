@@ -60,6 +60,14 @@ Acceptance criteria:
 - Provider readiness is visible.
 - Failure states are actionable and do not expose implementation jargon.
 
+Implemented scope:
+
+- Add `/console/first-run` as a business-readable provider setup page.
+- Add `/api/console/first-run` to expose setup choices for demo, hosted provider, and local model mode.
+- Add `POST /api/console/first-run` to save non-secret setup choices into `user.env`.
+- Keep hosted provider keys out of app-editable setup; keys remain private environment or deployment secrets.
+- Explain privacy, cost, quality, readiness, and recovery steps for each setup mode.
+
 Suggested labels:
 
 - `usability`
