@@ -115,3 +115,30 @@ Confirmed behavior:
 Documented limitation:
 
 - Browser click-through was verified through console/API regression coverage rather than a live browser automation pass on this branch.
+
+### Milestone 6 Final QA Record
+
+Milestone 6 final QA was run on July 6, 2026 for the business-user productization branch.
+
+Passed checks:
+
+- `ruff check .`
+- `pytest`
+- `blacklight health`
+- `blacklight demo --trace-db-path .tmp\milestone6-final-qa.sqlite3 --session-id m6-final-demo`
+- `blacklight local-model status`
+- FastAPI console smoke checks for `/api/console/first-run`, `/api/console/dashboard`, and `/api/console/local-model`
+- tracked-file hygiene scan for private env files, generated caches, SQLite traces, local model artifacts, and private plans
+- `git diff --check`
+
+Confirmed behavior:
+
+- App-shell packaging assumptions are captured in `packaging/app-shell.json` and covered by regression tests.
+- First-run setup explains demo, hosted provider, and local model choices without requiring a user to edit environment files.
+- Hosted provider keys remain private environment settings rather than app-editable `user.env` values.
+- Local model management reports runtime readiness, installed-model state, fallback status, and recovery commands without bundling model weights.
+- Console, CLI, API, eval, trace, and review surfaces remain covered by the regression suite.
+
+Documented limitation:
+
+- Live Docker/Ollama model installation was not required for this QA pass. The branch verifies local model configuration and status behavior while leaving model downloads as an opt-in environment-specific step.

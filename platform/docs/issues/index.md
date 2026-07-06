@@ -52,3 +52,4 @@ Each milestone ends with a final QA and approval ticket. That gate is meant to k
 - [#45 Add First-Run Provider Setup](https://github.com/tserd-io/blacklight/issues/45)
 - [#46 Add Local Model Management](https://github.com/tserd-io/blacklight/issues/46)
 - [#47 Add Business Review Queue UI](https://github.com/tserd-io/blacklight/issues/47)
+- [#54 Milestone 6 Final QA And Productization Approval](https://github.com/tserd-io/blacklight/issues/54)
