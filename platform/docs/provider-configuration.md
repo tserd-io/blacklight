@@ -166,4 +166,32 @@ Then run the normal CLI path:
 blacklight classify --subject "Login error" --body "The export page fails after login."
 ```
 
+Inspect local model readiness:
+
+```bash
+blacklight local-model status
+```
+
+The local model status surface is also available at `/console/local-model` and
+`/api/console/local-model`. It reports:
+
+- `unavailable` when local mode is not selected, Ollama is unreachable, or the model is missing
+- `loading` when the runtime does not respond before the readiness timeout
+- `ready` when Ollama is reachable and the configured model is installed
+
+Blacklight does not bundle model weights. That keeps the package small, avoids unclear
+redistribution/licensing risk, and lets each installation choose a model appropriate for its
+hardware. A business-user installer could later offer a first-run download flow for a recommended
+small model, but it should show disk usage, license terms, update behavior, and expected
+performance before downloading.
+
+Local fallback is represented separately from the active provider. If Ollama is reachable and the
+selected local model is installed, the local model status reports fallback as available even when
+the active provider is still mock or hosted. That gives a future packaged app a clear path to use a
+local model when hosted service is unavailable or when privacy/control mode is selected.
+
+Hosted provider credentials stay private. Keep keys such as `OPENAI_API_KEY` in `.env`, shell
+environment variables, or deployment secrets; the app-editable `user.env` path is for non-secret
+settings such as provider choice, model name, local endpoint URL, and reliability limits.
+
 This is a local-provider configuration path, not the default release path. CI and quickstart still use `mock` so they do not require Docker, Ollama, model downloads, GPU access, or live provider credentials.

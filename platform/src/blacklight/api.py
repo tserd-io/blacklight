@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from blacklight.errors import GuardrailValidationError, describe_exception, session_not_found_error
 from blacklight.evals.runner import run_ticket_classification_eval
 from blacklight.examples.ticket_classifier import TicketClassifier
+from blacklight.local_models import local_model_status
 from blacklight.models import TicketClassification, TicketRequest
 from blacklight.observability.idempotency import (
     IdempotencyInProgressError,
@@ -55,6 +56,7 @@ CONSOLE_NAV = [
     ("evals", "Evals", "/console/evals"),
     ("prompts", "Prompts", "/console/prompts"),
     ("providers", "Providers", "/console/providers"),
+    ("local-model", "Local Model", "/console/local-model"),
     ("review", "Review Queue", "/console/review"),
     ("settings", "Settings", "/console/settings"),
     ("docs", "Docs", "/console/docs"),
@@ -252,9 +254,9 @@ def _console_shell(*, active: str, title: str, body: str) -> HTMLResponse:
     th {{ background: #edf2f7; font-size: 12px; text-transform: uppercase; color: #526071; }}
     code {{ background: #eef2f6; border: 1px solid #d8dee8; border-radius: 6px; padding: 2px 5px; }}
     .status {{ display: inline-block; border-radius: 999px; padding: 4px 8px; font-size: 12px; background: #edf2f7; }}
-    .status.failed, .status.rejected {{ background: #ffe8e8; color: #991b1b; }}
-    .status.needs_review, .status.pending {{ background: #fff4d6; color: #8a5a00; }}
-    .status.accepted, .status.approved {{ background: #def7ec; color: #046c4e; }}
+    .status.failed, .status.rejected, .status.unavailable {{ background: #ffe8e8; color: #991b1b; }}
+    .status.needs_review, .status.pending, .status.loading {{ background: #fff4d6; color: #8a5a00; }}
+    .status.accepted, .status.approved, .status.ready {{ background: #def7ec; color: #046c4e; }}
     .empty {{ color: #64748b; text-align: center; }}
     a {{ color: #1d4ed8; }}
     @media (max-width: 820px) {{
@@ -493,13 +495,29 @@ def _provider_payload(provider: str) -> dict[str, Any]:
     return payload
 
 
+def _local_model_payload() -> dict[str, Any]:
+    status = local_model_status(settings).as_dict()
+    status["links"] = {
+        "provider_configuration": "/docs/provider-configuration.md",
+        "settings_api": "/api/console/settings",
+    }
+    status.update(
+        _cli_affordance(
+            "blacklight local-model status",
+            status="blacklight local-model status",
+            health="blacklight health",
+        )
+    )
+    return status
+
+
 def _editable_settings_catalog() -> list[dict[str, Any]]:
     definitions = {
         "LLM_PROVIDER": ("Provider", "provider", "select", ["mock", "openai", "custom"]),
         "LLM_MODEL": ("Model", "provider", "text", None),
         "TRACE_DB_PATH": ("Trace database path", "storage", "text", None),
-        "OPENAI_API_KEY": ("OpenAI API key", "provider", "secret", None),
         "LLM_CUSTOM_PROVIDER": ("Custom provider import path", "provider", "text", None),
+        "OLLAMA_BASE_URL": ("Ollama base URL", "provider", "text", None),
         "LLM_PROVIDER_TIMEOUT_SECONDS": ("Provider timeout seconds", "reliability", "number", None),
         "LLM_PROVIDER_MAX_RETRIES": ("Provider max retries", "reliability", "number", None),
         "LLM_PROVIDER_RATE_LIMIT_REQUESTS": (
@@ -577,6 +595,7 @@ def _settings_payload() -> dict[str, Any]:
         "trace_db_path": settings.trace_db_path,
         "openai_configured": bool(settings.openai_api_key),
         "custom_provider_configured": bool(settings.custom_provider_path),
+        "ollama_base_url": settings.ollama_base_url,
         "provider_timeout_seconds": settings.provider_timeout_seconds,
         "provider_max_retries": settings.provider_max_retries,
         "provider_rate_limit_requests": settings.provider_rate_limit_requests,
@@ -603,6 +622,7 @@ def _dashboard_payload(limit: int = 5) -> dict[str, Any]:
         "review_queue": review_payload["summary"],
         "workflows": [_workflow_payload()],
         "providers": [_provider_payload(provider) for provider in ["mock", "openai", "custom"]],
+        "local_model": _local_model_payload(),
         "settings": _settings_payload(),
         "links": {
             "console": "/console",
@@ -612,6 +632,7 @@ def _dashboard_payload(limit: int = 5) -> dict[str, Any]:
             "evals": "/api/console/evals",
             "prompts": "/api/console/prompts",
             "providers": "/api/console/providers",
+            "local_model": "/api/console/local-model",
             "reviews": "/api/console/reviews",
             "settings": "/api/console/settings",
         },
@@ -852,6 +873,7 @@ def _render_console_prompts() -> HTMLResponse:
 
 
 def _render_console_providers() -> HTMLResponse:
+    local_model = _local_model_payload()
     body = f"""
 <h1>Providers</h1>
 <p class="muted">Runtime provider readiness.</p>
@@ -860,9 +882,44 @@ def _render_console_providers() -> HTMLResponse:
   <div class="panel"><h2>Model</h2><div class="metric">{escape(settings.model)}</div></div>
   <div class="panel"><h2>OpenAI Key</h2><div class="metric">{escape(str(bool(settings.openai_api_key)))}</div></div>
   <div class="panel"><h2>Custom Provider</h2><div class="metric">{escape(str(bool(settings.custom_provider_path)))}</div></div>
+  <div class="panel"><h2>Local Model</h2><p><span class="status {escape(str(local_model['status']))}">{escape(str(local_model['status']))}</span></p><p><a href="/console/local-model">Inspect local model readiness</a></p></div>
   {_console_command_panel("blacklight health")}
 </section>"""
     return _console_shell(active="providers", title="Providers", body=body)
+
+
+def _render_console_local_model() -> HTMLResponse:
+    status = _local_model_payload()
+    fallback = status["fallback"]
+    hosted_provider = fallback["hosted_provider"]
+    tradeoffs = status["tradeoffs"]
+    body = f"""
+<h1>Local Model</h1>
+<p class="muted">Model availability, startup guidance, local fallback readiness, and private hosted-provider status.</p>
+<section class="grid">
+  <div class="panel"><h2>Status</h2><p><span class="status {escape(str(status['status']))}">{escape(str(status['status']))}</span></p><p>{escape(str(status['status_message']))}</p></div>
+  <div class="panel"><h2>Runtime</h2><div class="metric">{escape(str(status['runtime']))}</div><p><code>{escape(str(status['base_url']))}</code></p></div>
+  <div class="panel"><h2>Model</h2><div class="metric">{escape(str(status['model']))}</div><p>Installed: {escape(str(status['installed']))}</p></div>
+  <div class="panel"><h2>Local Fallback</h2><div class="metric">{escape(str(fallback['configured']))}</div><p>{escape(str(fallback['message']))}</p></div>
+  <div class="panel"><h2>Private Hosted Provider</h2><div class="metric">{escape(str(hosted_provider['configured']))}</div><p>{escape(str(hosted_provider['message']))}</p></div>
+  <div class="panel"><h2>Start Runtime</h2><p>{_cli_command(str(status['start_command']))}</p></div>
+  <div class="panel"><h2>Install Model</h2><p>{_cli_command(str(status['install_command']))}</p></div>
+  {_console_command_panel("blacklight local-model status")}
+</section>
+<section class="panel">
+  <h2>Tradeoffs</h2>
+  <table>
+    <thead><tr><th>Area</th><th>What To Know</th></tr></thead>
+    <tbody>
+      <tr><td data-label="Area">Privacy/control</td><td data-label="What To Know">{escape(str(tradeoffs['privacy_control']))}</td></tr>
+      <tr><td data-label="Area">Package size</td><td data-label="What To Know">{escape(str(tradeoffs['package_size']))}</td></tr>
+      <tr><td data-label="Area">Hardware</td><td data-label="What To Know">{escape(str(tradeoffs['hardware']))}</td></tr>
+      <tr><td data-label="Area">Quality</td><td data-label="What To Know">{escape(str(tradeoffs['quality']))}</td></tr>
+      <tr><td data-label="Area">Support</td><td data-label="What To Know">{escape(str(tradeoffs['support']))}</td></tr>
+    </tbody>
+  </table>
+</section>"""
+    return _console_shell(active="local-model", title="Local Model", body=body)
 
 
 def _render_console_review() -> HTMLResponse:
@@ -1241,6 +1298,11 @@ def console_providers() -> HTMLResponse:
     return _render_console_providers()
 
 
+@app.get("/console/local-model", response_class=HTMLResponse)
+def console_local_model() -> HTMLResponse:
+    return _render_console_local_model()
+
+
 @app.get("/console/review", response_class=HTMLResponse)
 def console_review() -> HTMLResponse:
     return _render_console_review()
@@ -1498,10 +1560,16 @@ def console_prompt_json(
 def console_providers_json() -> dict[str, Any]:
     payload = {
         "providers": [_provider_payload(provider) for provider in ["mock", "openai", "custom"]],
+        "local_model": _local_model_payload(),
         "active_provider": settings.provider,
     }
     payload.update(_cli_affordance("blacklight health", health="blacklight health"))
     return payload
+
+
+@app.get("/api/console/local-model")
+def console_local_model_json() -> dict[str, Any]:
+    return _local_model_payload()
 
 
 @app.post("/api/console/providers/{provider_name}/test")

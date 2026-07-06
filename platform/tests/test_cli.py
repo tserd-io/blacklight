@@ -244,10 +244,25 @@ def test_health_command_prints_runtime_config(capsys):
     assert payload["model"] == "mock-ticket-classifier"
     assert payload["openai_configured"] is False
     assert payload["custom_provider_configured"] is False
+    assert payload["ollama_base_url"] == "http://localhost:11434"
     assert payload["provider_timeout_seconds"] == 30.0
     assert payload["provider_max_retries"] == 2
     assert payload["provider_rate_limit_requests"] == 3
     assert payload["provider_rate_limit_window_seconds"] == 10.0
+
+
+def test_local_model_status_command_prints_readiness(capsys, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://example.com")
+
+    exit_code = main(["local-model", "status"])
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["runtime"] == "ollama"
+    assert payload["status"] == "unavailable"
+    assert payload["ready"] is False
+    assert payload["fallback"]["configured"] is False
 
 
 def test_prompts_list_command_prints_prompt_metadata(capsys):

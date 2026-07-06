@@ -64,13 +64,22 @@ Tasks:
 - Add model health checks and clear status messages.
 - Document hardware requirements and expected performance ranges.
 - Explain model licensing, update strategy, and disk usage.
-- Support hosted-provider fallback when the local model is unavailable, too slow, or below quality thresholds.
+- Support local-model fallback when the hosted provider is unavailable, privacy mode is selected, or the user chooses a local model.
 
 Acceptance criteria:
 
 - The user can see whether the local model is installed, loading, ready, or unavailable.
-- The app can fall back to a hosted provider when configured.
+- The app can identify a ready local model fallback when one is installed and configured.
 - Local model tradeoffs are documented clearly: privacy/control versus package size, hardware compatibility, quality, and support burden.
+
+Implemented scope:
+
+- Add `blacklight local-model status` for local runtime readiness inspection.
+- Add `/console/local-model` and `/api/console/local-model` for app-visible local model status.
+- Report Ollama status as `unavailable`, `loading`, or `ready` based on configuration, endpoint reachability, and installed model list.
+- Surface start/install commands, installed model choices, local fallback status, private hosted-provider status, and tradeoff notes without requiring model downloads in CI or quickstart.
+- Keep provider keys out of app-editable `user.env`; private keys belong in `.env`, shell environment variables, or deployment secrets.
+- Keep model weights out of the repo; a future installer can choose first-run download with explicit disk, license, hardware, quality, and support disclosures.
 
 Suggested labels:
 
