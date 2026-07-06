@@ -28,6 +28,7 @@ Blacklight Studio keeps those ideas small enough to read quickly while still run
 - [docs/create-your-own-workflow.md](docs/create-your-own-workflow.md): guide for adapting the starter to a new task
 - [docs/tradeoffs.md](docs/tradeoffs.md): what is intentionally simplified
 - [docs/operational-cost-and-ownership.md](docs/operational-cost-and-ownership.md): cost and ownership model for regular live runs
+- [docs/desktop-packaging.md](docs/desktop-packaging.md): web-first app shell packaging plan and installer assumptions
 - [docs/release-notes.md](docs/release-notes.md): v0.1.0 CLI-ready release notes
 
 ## Features
