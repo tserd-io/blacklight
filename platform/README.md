@@ -377,6 +377,15 @@ set LLM_MODEL=my-model
 
 The project is also configured for local model experiments with Ollama. Use the included `docker-compose.ollama.yml` to start Ollama, pull a model such as `llama3.1`, and point `LLM_CUSTOM_PROVIDER` at the bundled `blacklight.providers.ollama_provider:OllamaProvider` adapter. Users who already have their own provider, local endpoint, or model runtime can keep using the same custom-provider contract instead.
 
+```bash
+docker compose -f docker-compose.ollama.yml up -d
+docker compose -f docker-compose.ollama.yml exec ollama ollama pull llama3.1
+set LLM_PROVIDER=custom
+set LLM_CUSTOM_PROVIDER=blacklight.providers.ollama_provider:OllamaProvider
+set LLM_MODEL=llama3.1
+set OLLAMA_BASE_URL=http://localhost:11434
+```
+
 Local model servers such as Ollama, LM Studio, llama.cpp, vLLM, or a private localhost endpoint can use the same custom provider path. See [docs/provider-configuration.md](docs/provider-configuration.md).
 
 Blacklight exposes local model readiness through the console and CLI:
