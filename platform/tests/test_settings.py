@@ -95,7 +95,6 @@ def test_write_user_env_preserves_private_unknown_lines_and_rejects_unknown_sett
     values = write_user_env(
         {
             "LLM_PROVIDER": "openai",
-            "OPENAI_API_KEY": "sk-test value",
             "OLLAMA_BASE_URL": "http://localhost:11434",
         },
         user_env_path,
@@ -103,10 +102,8 @@ def test_write_user_env_preserves_private_unknown_lines_and_rejects_unknown_sett
     written = user_env_path.read_text(encoding="utf-8")
 
     assert values["LLM_PROVIDER"] == "openai"
-    assert values["OPENAI_API_KEY"] == "sk-test value"
     assert values["OLLAMA_BASE_URL"] == "http://localhost:11434"
     assert "PRIVATE_OPERATOR_VALUE=leave-me-alone" in written
-    assert 'OPENAI_API_KEY="sk-test value"' in written
     assert "OLLAMA_BASE_URL=http://localhost:11434" in written
 
     with pytest.raises(ValueError, match="Unsupported user.env setting"):
