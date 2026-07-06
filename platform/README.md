@@ -28,6 +28,7 @@ Blacklight Studio keeps those ideas small enough to read quickly while still run
 - [docs/create-your-own-workflow.md](docs/create-your-own-workflow.md): guide for adapting the starter to a new task
 - [docs/tradeoffs.md](docs/tradeoffs.md): what is intentionally simplified
 - [docs/operational-cost-and-ownership.md](docs/operational-cost-and-ownership.md): cost and ownership model for regular live runs
+- [docs/desktop-packaging.md](docs/desktop-packaging.md): web-first app shell packaging plan and installer assumptions
 - [docs/release-notes.md](docs/release-notes.md): v0.1.0 CLI-ready release notes
 
 ## Features
@@ -395,6 +396,16 @@ blacklight local-model status
 ```
 
 The status reports whether the local runtime is selected, loading, ready, or unavailable, lists installed local models when Ollama is reachable, and shows whether a local fallback model is ready. Model weights are not bundled into the repo; a later installer can add a first-run download flow with explicit disk, license, hardware, quality, and support tradeoffs. Hosted provider keys such as `OPENAI_API_KEY` should stay in `.env`, shell environment variables, or deployment secrets rather than app-editable `user.env`.
+
+## App Shell Packaging Direction
+
+The enterprise product direction is web-first: the most serviceable deployment is a browser web app served from managed infrastructure. The desktop shell is an optional local/private packaging layer for demos, offline/private operation, or local model setup.
+
+Either deployment should still behave like a clickable application: a Blacklight Studio icon, shortcut, browser app, or Linux desktop entry should open the managed web app or local console without requiring the user to start from a terminal.
+
+The desktop packaging direction is Windows and Linux first, with macOS treated as a future packaging target. The app icon asset is `packaging/assets/blacklight-studio-icon-clean-square-hires.png`; the installer icon asset is `packaging/assets/blacklight-studio-icon-flashlight-ring-clean-square-hires.png`.
+
+The installer should explain that local model setup may require administrator permissions because it can install/configure a local model runtime and download model files. Users who already have an approved hosted provider key or configured endpoint should be able to skip local model setup and validate that provider instead. See [docs/desktop-packaging.md](docs/desktop-packaging.md).
 
 ## Guardrails And Review Routing
 
