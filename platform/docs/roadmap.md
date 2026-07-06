@@ -73,7 +73,8 @@ Milestone 5 final QA was run on July 5, 2026. The smoke path confirmed the defau
 
 ## Next
 
-- Continue into desktop productization: packaged app shell, first-run provider setup, local model management, and installer polish
+- Continue into web-first app productization: managed browser deployment as the enterprise default, with an optional packaged desktop shell for local/private use
+- Package the optional Blacklight Studio desktop shell for Windows and Linux first, using the documented app shell manifest and deferring macOS until signing/notarization choices are clearer
 - Add architecture screenshots or terminal examples to the README
 
 ## Later
@@ -82,4 +83,4 @@ Milestone 5 final QA was run on July 5, 2026. The smoke path confirmed the defau
 - Add OpenTelemetry export
 - Add RAG policy-question example
 - Add deployment notes for container platforms
-- Explore a packaged desktop app with an installer, app icon, first-run setup, local model management, and hosted-provider fallback
+- Explore a managed browser web app with enterprise deployment controls, plus an optional desktop installer with app icon, first-run setup, local model management, and hosted-provider fallback

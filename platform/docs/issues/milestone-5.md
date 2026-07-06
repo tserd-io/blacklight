@@ -11,17 +11,30 @@ Provide a polished entry point for business users who expect an installable app 
 
 Tasks:
 
-- Define a desktop app packaging approach for Windows first, with macOS noted as a future target.
-- Include app icon, installer, launch shortcut, and first-run experience.
+- Define the browser web app as the most serviceable enterprise deployment path.
+- Define a desktop app packaging approach for Windows and Linux first, with macOS noted as a future target.
+- Include app icon, installer icon, launch shortcut, and first-run experience.
 - Start the local API/workflow service behind the app when needed.
 - Show provider/model readiness before a user runs a workflow.
 - Document package size, update cadence, signing, and support tradeoffs.
+- Tell users that local model setup may require administrator permissions.
+- Allow users to bypass local model setup when they already have a hosted provider key or configured endpoint.
 
 Acceptance criteria:
 
+- Enterprise deployment guidance explains why the browser web app is the default serviceable path.
 - A business user can install and launch the app without using a terminal.
 - The app exposes whether it is running locally, using a hosted provider, or in fallback mode.
 - Packaging notes explain support risks and deployment assumptions.
+
+Implemented scope:
+
+- Document the browser web app as the enterprise default, with the desktop shell as an optional local/private packaging layer.
+- Add `docs/desktop-packaging.md` with the Windows/Linux-first packaging plan and macOS future target.
+- Add `packaging/app-shell.json` to capture shell startup paths, readiness routes, first-run modes, icon asset names, admin-permission disclosure, and provider-key bypass behavior.
+- Record `packaging/assets/blacklight-studio-icon-clean-square-hires.png` as the app icon source asset.
+- Record `packaging/assets/blacklight-studio-icon-flashlight-ring-clean-square-hires.png` as the installer icon source asset.
+- Document that local model setup may require administrator permissions and can be skipped when a hosted provider key or configured endpoint is available.
 
 Suggested labels:
 

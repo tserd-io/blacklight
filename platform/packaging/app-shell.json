@@ -1,0 +1,52 @@
+{
+  "app_name": "Blacklight Studio",
+  "enterprise_default": "browser_web_app",
+  "platforms": {
+    "managed_web": ["browser"],
+    "first_class": ["windows", "linux"],
+    "future": ["macos"]
+  },
+  "serviceability": {
+    "browser_web_app": "Preferred enterprise deployment for centralized updates, access control, audit, observability, and provider-key governance.",
+    "desktop_shell": "Optional local/private packaging layer that starts the local service and opens the same console experience."
+  },
+  "icons": {
+    "app": "packaging/assets/blacklight-studio-icon-clean-square-hires.png",
+    "installer": "packaging/assets/blacklight-studio-icon-flashlight-ring-clean-square-hires.png"
+  },
+  "startup": {
+    "local_service": "blacklight.api:app",
+    "console_path": "/console",
+    "readiness_paths": ["/console/providers", "/console/local-model", "/console/settings"]
+  },
+  "clickable_entry_points": {
+    "required": true,
+    "managed_web": "Install a branded shortcut, pinned browser app, start-menu entry, or Linux desktop entry that opens the approved Blacklight web URL.",
+    "local_shell": "Use the app icon to start the local service when needed and open /console in the packaged shell or controlled browser view.",
+    "user_promise": "Click Blacklight Studio, review readiness, run the workflow."
+  },
+  "installer": {
+    "requires_admin_for_local_model_setup": true,
+    "local_model_setup_can_be_skipped": true,
+    "provider_key_bypass_supported": true,
+    "default_mode": "demo",
+    "admin_permission_message": "Blacklight Studio can install and configure a local model runtime for private/offline use. This may require administrator permissions and can download model files to this computer."
+  },
+  "first_run_modes": [
+    {
+      "id": "local_model",
+      "label": "Local model",
+      "summary": "Use private/local inference with model readiness checks and optional model download."
+    },
+    {
+      "id": "hosted_provider",
+      "label": "Hosted provider",
+      "summary": "Use an existing approved provider key and validate readiness before running workflows."
+    },
+    {
+      "id": "demo",
+      "label": "Demo mode",
+      "summary": "Explore with synthetic examples and no live provider."
+    }
+  ]
+}
