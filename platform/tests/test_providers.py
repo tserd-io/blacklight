@@ -68,3 +68,17 @@ def test_ollama_provider_normalizes_generate_response(monkeypatch):
     assert response.input_tokens == 12
     assert response.output_tokens == 4
     assert response.metadata["base_url"] == "http://localhost:11434"
+
+
+def test_ollama_provider_reads_base_url_from_user_env(monkeypatch, tmp_path):
+    user_env_path = tmp_path / "user.env"
+    user_env_path.write_text(
+        "OLLAMA_BASE_URL=http://127.0.0.1:11435\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BLACKLIGHT_USER_ENV_PATH", str(user_env_path))
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    provider = OllamaProvider()
+
+    assert provider.base_url == "http://127.0.0.1:11435"

@@ -247,6 +247,7 @@ def health(_args: argparse.Namespace) -> int:
             "trace_db_path": settings.trace_db_path,
             "openai_configured": bool(settings.openai_api_key),
             "custom_provider_configured": bool(settings.custom_provider_path),
+            "ollama_base_url": settings.ollama_base_url,
             "provider_timeout_seconds": settings.provider_timeout_seconds,
             "provider_max_retries": settings.provider_max_retries,
             "provider_rate_limit_requests": settings.provider_rate_limit_requests,

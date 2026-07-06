@@ -135,6 +135,17 @@ pytest tests/test_provider_configuration_smoke.py
 
 The local endpoint path uses the same `custom` provider contract, so Ollama, LM Studio, llama.cpp, vLLM, Transformers, or a private localhost service can be smoke-tested without changing application code.
 
+Bundled Ollama adapter:
+
+```bash
+set RUN_OLLAMA_PROVIDER_SMOKE=1
+set LLM_MODEL=llama3.1
+set OLLAMA_BASE_URL=http://localhost:11434
+pytest tests/test_provider_configuration_smoke.py
+```
+
+This opt-in test uses `blacklight.providers.ollama_provider:OllamaProvider` directly. It is skipped in default CI and should be run only after the local Ollama runtime is started and the model is installed.
+
 ## Ollama Runtime Configuration
 
 The repository includes a lightweight Ollama configuration for local experiments. It does not vendor an Ollama binary or model weights into the repo. Docker downloads the runtime image when you start it, and `ollama pull` downloads the selected model into the local Docker volume.
@@ -166,4 +177,6 @@ Then run the normal CLI path:
 blacklight classify --subject "Login error" --body "The export page fails after login."
 ```
 
-This is a local-provider configuration path, not the default release path. CI and quickstart still use `mock` so they do not require Docker, Ollama, model downloads, GPU access, or live provider credentials.
+The same values can be stored in `user.env` for local console-managed settings. Runtime process environment variables still take precedence, so shell exports and deployment settings can override `user.env` without editing it.
+
+This is a local-provider configuration path, not the default release path. CI and quickstart still use `mock` so they do not require Docker, Ollama, model downloads, GPU access, or live provider credentials. Ollama runs locally, but it is still a live model runtime: output quality, speed, disk usage, and hardware compatibility depend on the selected model and machine. Mock mode remains deterministic and free for tests; hosted APIs require private credentials and may create token costs.

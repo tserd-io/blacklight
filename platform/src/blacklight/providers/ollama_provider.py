@@ -6,15 +6,20 @@ from urllib import request as urlrequest
 
 from blacklight.models import ProviderRequest, ProviderResponse
 from blacklight.providers.base import LLMProvider
+from blacklight.settings import load_settings
 
 
 class OllamaProvider(LLMProvider):
     name = "ollama"
 
     def __init__(self, base_url: str | None = None) -> None:
-        self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip(
-            "/"
-        )
+        settings = load_settings()
+        self.base_url = (
+            base_url
+            or os.getenv("OLLAMA_BASE_URL")
+            or settings.ollama_base_url
+            or "http://localhost:11434"
+        ).rstrip("/")
 
     def complete(self, request: ProviderRequest) -> ProviderResponse:
         payload = json.dumps(

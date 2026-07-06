@@ -102,3 +102,21 @@ def test_local_endpoint_provider_configuration_smoke_is_opt_in():
     assert response.provider
     assert response.model == settings.model
     assert response.text is not None
+
+
+def test_ollama_provider_configuration_smoke_is_opt_in():
+    _skip_unless_enabled(
+        "RUN_OLLAMA_PROVIDER_SMOKE",
+        "Requires a reachable Ollama runtime and an installed model such as llama3.1.",
+    )
+
+    settings = Settings(
+        provider="custom",
+        model=os.getenv("LLM_MODEL", "llama3.1"),
+        custom_provider_path="blacklight.providers.ollama_provider:OllamaProvider",
+    )
+    response = create_provider(settings).complete(_request(settings.model))
+
+    assert response.provider == "ollama"
+    assert response.model == settings.model
+    assert response.text is not None

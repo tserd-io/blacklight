@@ -26,6 +26,7 @@ def test_settings_load_from_user_env_when_process_env_is_absent(monkeypatch, tmp
                 "LLM_MODEL=local-model",
                 "TRACE_DB_PATH=local.sqlite3",
                 "LLM_CUSTOM_PROVIDER=my_package.providers:Provider",
+                "OLLAMA_BASE_URL=http://localhost:11435",
                 "LLM_PROVIDER_TIMEOUT_SECONDS=9.5",
                 "LLM_PROVIDER_MAX_RETRIES=5",
                 "LLM_PROVIDER_RATE_LIMIT_REQUESTS=11",
@@ -39,6 +40,7 @@ def test_settings_load_from_user_env_when_process_env_is_absent(monkeypatch, tmp
         "LLM_MODEL",
         "TRACE_DB_PATH",
         "LLM_CUSTOM_PROVIDER",
+        "OLLAMA_BASE_URL",
         "LLM_PROVIDER_TIMEOUT_SECONDS",
         "LLM_PROVIDER_MAX_RETRIES",
         "LLM_PROVIDER_RATE_LIMIT_REQUESTS",
@@ -52,6 +54,7 @@ def test_settings_load_from_user_env_when_process_env_is_absent(monkeypatch, tmp
     assert settings.model == "local-model"
     assert settings.trace_db_path == "local.sqlite3"
     assert settings.custom_provider_path == "my_package.providers:Provider"
+    assert settings.ollama_base_url == "http://localhost:11435"
     assert settings.provider_timeout_seconds == 9.5
     assert settings.provider_max_retries == 5
     assert settings.provider_rate_limit_requests == 11
@@ -81,6 +84,7 @@ def test_write_user_env_preserves_private_unknown_lines_and_rejects_unknown_sett
         {
             "LLM_PROVIDER": "openai",
             "OPENAI_API_KEY": "sk-test value",
+            "OLLAMA_BASE_URL": "http://localhost:11434",
         },
         user_env_path,
     )
@@ -88,8 +92,10 @@ def test_write_user_env_preserves_private_unknown_lines_and_rejects_unknown_sett
 
     assert values["LLM_PROVIDER"] == "openai"
     assert values["OPENAI_API_KEY"] == "sk-test value"
+    assert values["OLLAMA_BASE_URL"] == "http://localhost:11434"
     assert "PRIVATE_OPERATOR_VALUE=leave-me-alone" in written
     assert 'OPENAI_API_KEY="sk-test value"' in written
+    assert "OLLAMA_BASE_URL=http://localhost:11434" in written
 
     with pytest.raises(ValueError, match="Unsupported user.env setting"):
         write_user_env({"SHELL": "powershell"}, user_env_path)

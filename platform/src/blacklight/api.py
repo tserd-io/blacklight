@@ -500,6 +500,7 @@ def _editable_settings_catalog() -> list[dict[str, Any]]:
         "TRACE_DB_PATH": ("Trace database path", "storage", "text", None),
         "OPENAI_API_KEY": ("OpenAI API key", "provider", "secret", None),
         "LLM_CUSTOM_PROVIDER": ("Custom provider import path", "provider", "text", None),
+        "OLLAMA_BASE_URL": ("Ollama base URL", "provider", "text", None),
         "LLM_PROVIDER_TIMEOUT_SECONDS": ("Provider timeout seconds", "reliability", "number", None),
         "LLM_PROVIDER_MAX_RETRIES": ("Provider max retries", "reliability", "number", None),
         "LLM_PROVIDER_RATE_LIMIT_REQUESTS": (
@@ -577,6 +578,7 @@ def _settings_payload() -> dict[str, Any]:
         "trace_db_path": settings.trace_db_path,
         "openai_configured": bool(settings.openai_api_key),
         "custom_provider_configured": bool(settings.custom_provider_path),
+        "ollama_base_url": settings.ollama_base_url,
         "provider_timeout_seconds": settings.provider_timeout_seconds,
         "provider_max_retries": settings.provider_max_retries,
         "provider_rate_limit_requests": settings.provider_rate_limit_requests,
