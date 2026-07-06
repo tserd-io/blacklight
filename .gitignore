@@ -17,3 +17,4 @@ user.env
 *.sqlite
 traces.sqlite3
 plans/
+AGENTS.md
