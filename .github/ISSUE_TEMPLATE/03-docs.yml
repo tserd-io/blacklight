@@ -1,0 +1,62 @@
+name: Documentation improvement
+description: Improve README, guides, architecture docs, examples, or screenshots.
+title: "[Docs]: "
+labels: ["docs"]
+body:
+  - type: dropdown
+    id: doc-area
+    attributes:
+      label: Documentation area
+      options:
+        - README walkthrough
+        - CLI examples
+        - API examples
+        - Architecture
+        - Provider setup
+        - Trace/eval guide
+        - Workflow recipe
+        - Production readiness
+        - Screenshots or terminal captures
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: audience
+    attributes:
+      label: Audience and job
+      description: Who is this for, and what should they understand or accomplish?
+      placeholder: A new engineer should run the mock demo, inspect the trace, and understand the equivalent CLI command within 30 seconds.
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: Current gap
+      description: What is unclear, missing, outdated, or too hard to discover?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-docs
+    attributes:
+      label: Proposed documentation change
+      placeholder: |
+        - Add real CLI output examples
+        - Add provider list/test setup section
+        - Add prompt -> provider -> validation -> guardrails -> trace -> eval diagram
+    validations:
+      required: true
+  - type: textarea
+    id: examples-needed
+    attributes:
+      label: Examples or assets needed
+      description: List screenshots, terminal captures, diagrams, API responses, or sample data this needs.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Public-safe examples only
+        - [ ] Commands are copy-pasteable
+        - [ ] Output examples match current behavior
+    validations:
+      required: true

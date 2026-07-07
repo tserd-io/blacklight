@@ -11,6 +11,7 @@ ASSETS = ROOT / "docs" / "assets"
 WIKI_ASSETS = ROOT / "docs" / "wiki" / "assets"
 PACKAGING_ASSETS = ROOT / "packaging" / "assets"
 WIDTH, HEIGHT = 1280, 420
+SIDEBAR_WIDTH, SIDEBAR_HEIGHT = 420, 150
 
 
 def font(name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -108,6 +109,145 @@ def save(name: str, img: Image.Image) -> None:
     for folder in (ASSETS, WIKI_ASSETS):
         img.save(folder / name, optimize=True)
         print(folder / name)
+
+
+def save_wiki_only(name: str, img: Image.Image) -> None:
+    WIKI_ASSETS.mkdir(parents=True, exist_ok=True)
+    img.save(WIKI_ASSETS / name, optimize=True)
+    print(WIKI_ASSETS / name)
+
+
+def sidebar_shell() -> Image.Image:
+    img = Image.new("RGBA", (SIDEBAR_WIDTH, SIDEBAR_HEIGHT), (0, 0, 0, 0))
+    base = Image.new("RGBA", (SIDEBAR_WIDTH, SIDEBAR_HEIGHT), "#080012")
+    px = base.load()
+    for y in range(SIDEBAR_HEIGHT):
+        for x in range(SIDEBAR_WIDTH):
+            nx = x / SIDEBAR_WIDTH
+            ny = y / SIDEBAR_HEIGHT
+            radial = max(0, 1 - math.hypot(nx - 0.72, ny - 0.42) * 1.25)
+            px[x, y] = (9 + int(radial * 12), 0, 30 + int(radial * 86), 255)
+
+    glow = Image.new("RGBA", (SIDEBAR_WIDTH, SIDEBAR_HEIGHT), (0, 0, 0, 0))
+    gdraw = ImageDraw.Draw(glow)
+    gdraw.rounded_rectangle((8, 8, SIDEBAR_WIDTH - 8, SIDEBAR_HEIGHT - 8), 20, fill=(255, 118, 216, 100))
+    img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(12)))
+
+    mask = Image.new("L", (SIDEBAR_WIDTH, SIDEBAR_HEIGHT), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((12, 12, SIDEBAR_WIDTH - 12, SIDEBAR_HEIGHT - 12), 18, fill=255)
+    img.paste(base, (0, 0), mask)
+    return img
+
+
+def sidebar_badge_console() -> Image.Image:
+    img = sidebar_shell()
+    draw = ImageDraw.Draw(img)
+    logo = icon("blacklight-studio-icon-flashlight-ring-clean-square-hires.png", 84, radius=10)
+    glow_paste(img, logo, (28, 34), color=(255, 118, 216), glow=18)
+    draw.text((132, 38), "BLACKLIGHT", font=font("VeraBd.ttf", 25), fill=(255, 255, 255, 255))
+    draw.text((132, 68), "WIKI", font=font("VeraBd.ttf", 25), fill=(205, 119, 255, 255))
+    draw.text((134, 106), "$ demo --verbose", font=font("Vera.ttf", 17), fill=(242, 219, 255, 230))
+    return img
+
+
+def sidebar_badge_map() -> Image.Image:
+    img = sidebar_shell()
+    draw = ImageDraw.Draw(img)
+    logo = icon("blacklight-studio-icon-clean-square-hires.png", 76, radius=10)
+    glow_paste(img, logo, (31, 37), color=(255, 118, 216), glow=18)
+    draw.text((126, 35), "START", font=font("VeraBd.ttf", 21), fill=(255, 255, 255, 255))
+    draw.text((126, 63), "BUILD", font=font("VeraBd.ttf", 21), fill=(201, 116, 255, 255))
+    draw.text((126, 91), "OPERATE", font=font("VeraBd.ttf", 21), fill=(255, 188, 232, 255))
+    draw.line((278, 46, 376, 46), fill=(255, 118, 216, 150), width=3)
+    draw.line((278, 74, 376, 74), fill=(170, 96, 255, 135), width=3)
+    draw.line((278, 102, 376, 102), fill=(255, 255, 255, 105), width=3)
+    return img
+
+
+def sidebar_badge_minimal() -> Image.Image:
+    img = sidebar_shell()
+    draw = ImageDraw.Draw(img)
+    logo = icon("blacklight-studio-icon-clean-square-hires.png", 70, radius=10)
+    glow_paste(img, logo, (32, 40), color=(255, 118, 216), glow=18)
+    draw.text((124, 45), ".Blacklight", font=font("VeraBd.ttf", 30), fill=(255, 255, 255, 255))
+    draw.text((126, 88), "mock -> prompt -> trace", font=font("Vera.ttf", 16), fill=(239, 217, 255, 230))
+    return img
+
+
+def sidebar_orb() -> Image.Image:
+    final_size = 192
+    scale = 4
+    size = final_size * scale
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+
+    def s(value: float) -> int:
+        return int(value * scale)
+
+    shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    sdraw = ImageDraw.Draw(shadow)
+    sdraw.ellipse((s(44), s(139), s(158), s(176)), fill=(0, 0, 0, 105))
+    img.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(s(11))))
+
+    glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    gdraw = ImageDraw.Draw(glow)
+    gdraw.ellipse((s(29), s(26), s(163), s(162)), fill=(255, 118, 216, 78))
+    gdraw.ellipse((s(48), s(43), s(148), s(147)), fill=(138, 70, 255, 145))
+    img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(s(12))))
+
+    sphere = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    pixels = sphere.load()
+    cx, cy = s(96), s(92)
+    radius = s(61)
+    light = (-0.55, -0.64, 0.72)
+    for y in range(size):
+        for x in range(size):
+            dx = x - cx
+            dy = y - cy
+            dist = math.hypot(dx, dy)
+            if dist > radius:
+                continue
+            nx = dx / radius
+            ny = dy / radius
+            z = math.sqrt(max(0, 1 - nx * nx - ny * ny))
+            diffuse = max(0, nx * light[0] + ny * light[1] + z * light[2])
+            rim = max(0, (dist / radius - 0.62) / 0.38)
+            lower = max(0, ny)
+            spec = max(0, nx * -0.46 + ny * -0.62 + z * 0.92) ** 20
+            core = max(0, 1 - dist / radius)
+
+            red = int(8 + diffuse * 38 + rim * 44 + spec * 82 + core * 8 + lower * 12)
+            green = int(0 + diffuse * 14 + rim * 8 + spec * 58)
+            blue = int(38 + diffuse * 114 + rim * 118 + spec * 112 + core * 22 + lower * 26)
+            alpha = int(255 * min(1, (radius - dist + s(1.4)) / s(1.4)))
+            pixels[x, y] = (min(255, red), min(255, green), min(255, blue), alpha)
+    img.alpha_composite(sphere)
+
+    overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    odraw.ellipse((s(37), s(33), s(155), s(151)), outline=(255, 255, 255, 52), width=s(1.1))
+    odraw.arc((s(38), s(34), s(154), s(150)), 206, 320, fill=(255, 255, 255, 132), width=s(2.0))
+    odraw.arc((s(41), s(37), s(151), s(147)), 315, 44, fill=(255, 118, 216, 92), width=s(1.4))
+    odraw.ellipse((s(58), s(45), s(99), s(68)), fill=(255, 255, 255, 38))
+    odraw.ellipse((s(68), s(49), s(90), s(60)), fill=(255, 255, 255, 42))
+    odraw.ellipse((s(59), s(119), s(137), s(151)), fill=(8, 0, 28, 34))
+    img.alpha_composite(overlay.filter(ImageFilter.GaussianBlur(s(0.35))))
+
+    mark_layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    mark_draw = ImageDraw.Draw(mark_layer)
+    mark_font = font("VeraBd.ttf", s(43))
+    bbox = mark_draw.textbbox((0, 0), ".B", font=mark_font)
+    mark_w = bbox[2] - bbox[0]
+    mark_h = bbox[3] - bbox[1]
+    mark_x = (size - mark_w) / 2 + s(7)
+    mark_y = (size - mark_h) / 2 - s(1)
+    mark_draw.text((mark_x + s(1.2), mark_y + s(1.5)), ".B", font=mark_font, fill=(18, 0, 42, 155))
+    mark_draw.text((mark_x, mark_y), ".B", font=mark_font, fill=(255, 255, 255, 255))
+
+    mark_mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mark_mask).ellipse((cx - radius + s(2), cy - radius + s(2), cx + radius - s(2), cy + radius - s(2)), fill=255)
+    img.alpha_composite(mark_layer, (0, 0))
+
+    return img.resize((final_size, final_size), Image.Resampling.LANCZOS)
 
 
 def variant_classic() -> Image.Image:
@@ -216,6 +356,10 @@ def main() -> None:
     for name, img in variants.items():
         save(name, img)
     save("blacklight-studio-wiki-header-variations.png", contact_sheet(list(variants)))
+    save_wiki_only("blacklight-sidebar-console.png", sidebar_badge_console())
+    save_wiki_only("blacklight-sidebar-map.png", sidebar_badge_map())
+    save_wiki_only("blacklight-sidebar-minimal.png", sidebar_badge_minimal())
+    save_wiki_only("blacklight-sidebar-orb.png", sidebar_orb())
 
 
 if __name__ == "__main__":

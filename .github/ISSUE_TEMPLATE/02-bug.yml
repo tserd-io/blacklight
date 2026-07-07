@@ -1,0 +1,80 @@
+name: Bug report
+description: Report broken, confusing, or inconsistent behavior.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Bugs should make the failure reproducible and explain what a user saw versus what they expected.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - API
+        - Console/UI
+        - Workflow runner
+        - Provider adapter
+        - Validation or guardrails
+        - Tracing
+        - Evals
+        - Documentation
+        - CI/release
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `cd platform`
+        2. Run `blacklight demo --verbose`
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the important error text, command output, status code, or screenshot.
+    validations:
+      required: true
+  - type: textarea
+    id: trace
+    attributes:
+      label: Trace, run, or eval ID
+      description: If available, include IDs or commands that can inspect the failure.
+      placeholder: "trace_id: trace_..."
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        - OS:
+        - Python:
+        - Install method:
+        - Provider: mock/openai/other
+    validations:
+      required: true
+  - type: textarea
+    id: public-safe
+    attributes:
+      label: Public-safe data check
+      description: Confirm no secrets, private prompts, API keys, or private plan details are included.
+      placeholder: "- [ ] I removed secrets, keys, customer data, and private planning details."
+    validations:
+      required: true
+  - type: textarea
+    id: possible-fix
+    attributes:
+      label: Possible fix
+      description: Optional. If you have a suspected cause or fix, note it here.

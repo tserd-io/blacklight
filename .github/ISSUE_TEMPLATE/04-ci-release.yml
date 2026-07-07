@@ -1,0 +1,58 @@
+name: CI, release, or automation
+description: Track GitHub Actions, packaging, publishing, checks, or repository automation.
+title: "[CI/Release]: "
+labels: ["ci"]
+body:
+  - type: dropdown
+    id: automation-area
+    attributes:
+      label: Automation area
+      options:
+        - CI checks
+        - Test matrix
+        - Packaging
+        - Release workflow
+        - Dependency updates
+        - Issue or PR automation
+        - Documentation publishing
+        - Security scanning
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should become easier, safer, or automatic?
+    validations:
+      required: true
+  - type: textarea
+    id: current-workflow
+    attributes:
+      label: Current workflow
+      description: Describe what has to be done manually today.
+  - type: textarea
+    id: proposed-workflow
+    attributes:
+      label: Proposed workflow
+      description: Include action names, triggers, branch rules, labels, or release steps if known.
+      placeholder: |
+        - On pull_request: run ruff and pytest
+        - On tag: build package and create release notes
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      placeholder: |
+        - [ ] `ruff check .`
+        - [ ] `pytest`
+        - [ ] GitHub Actions run is green
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks or permissions
+      description: Note required tokens, repo permissions, publishing risk, or secret handling.

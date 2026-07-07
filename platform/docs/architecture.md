@@ -10,6 +10,17 @@ The project models a compact internal LLM platform layer. Application workflows 
 - Observability stores request metadata, latency, token counts, estimated cost, validation status, guardrail outcome, and error category.
 - Eval runner executes synthetic fixtures against the same platform path used by the API.
 
+## Integration Boundary
+
+Blacklight should own governance, traceability, evals, guardrails, provider policy, and review decisions.
+
+LangGraph and LangChain can be useful future adapters:
+
+- LangGraph can execute validated workflow graphs with state, branching, retries, and human-review interrupts.
+- LangChain can adapt retrievers, document loaders, model wrappers, and tools behind Blacklight-owned registries and policies.
+
+They should not replace Blacklight's platform layer. See [LangGraph And LangChain Integration Strategy](langgraph-langchain.md).
+
 ## Request Flow
 
 1. A workflow submits a synthetic support ticket.

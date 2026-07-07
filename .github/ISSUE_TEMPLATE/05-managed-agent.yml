@@ -1,0 +1,80 @@
+name: Managed agent or domain/range design
+description: Define agent domain, range, touch surface, guardrails, and traceability.
+title: "[Agent]: "
+labels: ["enhancement", "architecture", "usability"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when adding or changing an agent capability. Every agent should make its domain and range explicit, and the trace from domain to range should be inspectable.
+  - type: input
+    id: agent-name
+    attributes:
+      label: Agent or capability name
+      placeholder: ticket_triage_agent
+    validations:
+      required: true
+  - type: textarea
+    id: domain
+    attributes:
+      label: Domain
+      description: What can this agent retrieve, know, inspect, or use as context?
+      placeholder: |
+        - Retrieval surface:
+        - Context inputs:
+        - Tools:
+        - Provider/model:
+        - Prompt versions:
+    validations:
+      required: true
+  - type: textarea
+    id: range
+    attributes:
+      label: Range
+      description: What can this agent touch, produce, decide, or enforce?
+      placeholder: |
+        - Touch surface:
+        - Output schema:
+        - Allowed side effects:
+        - Guardrail enforcement:
+        - Human review conditions:
+    validations:
+      required: true
+  - type: textarea
+    id: traceability
+    attributes:
+      label: Domain-to-range traceability
+      description: How will every input, tool call, decision, guardrail, output, and review handoff be traced?
+      placeholder: |
+        - Trace captures retrieval inputs and selected context
+        - Trace links prompt version, provider call, validation result, and guardrail outcome
+        - Trace shows final output and whether it was accepted, rejected, or sent to review
+    validations:
+      required: true
+  - type: textarea
+    id: cli-api-console
+    attributes:
+      label: CLI/API/console exposure
+      description: How will users run, inspect, reproduce, and debug this agent?
+      placeholder: |
+        - CLI:
+        - API:
+        - Console:
+    validations:
+      required: true
+  - type: textarea
+    id: demo-path
+    attributes:
+      label: Demo or mock-provider path
+      description: Explain how this works without secrets or paid provider access.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Domain and range are documented
+        - [ ] Trace shows domain -> range path end to end
+        - [ ] Guardrail outcomes are visible
+        - [ ] Mock-provider example works
+    validations:
+      required: true

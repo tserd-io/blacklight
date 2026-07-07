@@ -1,0 +1,52 @@
+name: Research or design spike
+description: Explore an approach before committing to implementation.
+title: "[Spike]: "
+labels: ["research"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question to answer
+      description: What uncertainty should this spike resolve?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why does this matter for Blacklight now?
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options to compare
+      placeholder: |
+        - Native implementation
+        - LangGraph
+        - LangChain
+        - Other
+  - type: textarea
+    id: evaluation
+    attributes:
+      label: Evaluation criteria
+      placeholder: |
+        - Fits domain/range trace model
+        - Works with mock provider
+        - Keeps CLI/API/console parity
+        - Low operational complexity
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Expected output
+      description: What artifact should this produce?
+      placeholder: Decision note, prototype branch, architecture doc update, or follow-up issues.
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+      description: What should this spike avoid doing?

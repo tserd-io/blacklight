@@ -1,0 +1,60 @@
+name: Milestone QA and approval
+description: Final review checklist for a milestone before it is closed.
+title: "[QA]: Milestone "
+labels: ["qa"]
+body:
+  - type: input
+    id: milestone
+    attributes:
+      label: Milestone
+      placeholder: "Milestone 7: Managed Agents"
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Milestone scope
+      description: Summarize the issues, docs, and behavior that should be complete.
+    validations:
+      required: true
+  - type: textarea
+    id: user-journey
+    attributes:
+      label: User journey QA
+      description: Describe the first-run or operator journey that should now work.
+      placeholder: Open console -> run demo -> inspect result -> click trace ID -> run eval -> copy CLI command.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification checklist
+      placeholder: |
+        - [ ] `cd platform`
+        - [ ] `ruff check .`
+        - [ ] `pytest`
+        - [ ] Mock-provider demo works without API keys
+        - [ ] Docs match current commands and outputs
+    validations:
+      required: true
+  - type: textarea
+    id: traceability
+    attributes:
+      label: Traceability and review
+      description: Confirm relevant traces, evals, guardrail outcomes, and review states are inspectable.
+  - type: textarea
+    id: release-notes
+    attributes:
+      label: Release or milestone notes
+      description: What should be communicated when this milestone closes?
+  - type: textarea
+    id: approval
+    attributes:
+      label: Approval
+      placeholder: |
+        - [ ] Product expectations met
+        - [ ] Engineering checks passed
+        - [ ] Public-safe docs and examples only
+        - [ ] Approved to close milestone
+    validations:
+      required: true

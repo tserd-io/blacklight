@@ -1,0 +1,87 @@
+name: Feature or product improvement
+description: Propose a focused improvement to the Blacklight platform, CLI, API, or console.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for user-facing platform improvements that should become scoped, testable work.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where does this primarily belong?
+      options:
+        - CLI
+        - API
+        - Console/UI
+        - Workflows
+        - Traces
+        - Evals
+        - Prompts
+        - Providers
+        - Review Queue
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should a user be able to do when this is complete?
+      placeholder: A new user can run the demo workflow, inspect the trace, and copy the equivalent CLI command.
+    validations:
+      required: true
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current state or gap
+      description: What is missing, confusing, slow, or incomplete today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-scope
+    attributes:
+      label: Proposed scope
+      description: List the concrete commands, endpoints, screens, docs, or examples this should add or change.
+      placeholder: |
+        - Add `blacklight workflows list`
+        - Add `/api/workflows`
+        - Show CLI equivalent after a console action
+    validations:
+      required: true
+  - type: textarea
+    id: cli-api-ui-parity
+    attributes:
+      label: CLI/API/console parity
+      description: If this affects user workflows, describe how the same action should appear across CLI, API, and console.
+      placeholder: "Console action should reveal: blacklight workflows run ticket_classifier --verbose"
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What must be true before this can close?
+      placeholder: |
+        - [ ] Mock provider path works without an API key
+        - [ ] Verbose CLI output explains what happened
+        - [ ] Tests or docs cover the new behavior
+    validations:
+      required: true
+  - type: input
+    id: milestone
+    attributes:
+      label: Suggested milestone
+      description: Example: Milestone 7, Milestone 8, or Engineering Workflow.
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - priority:p1 - unlocks near-term usability
+        - priority:p0 - blocks release or core workflow
+        - priority:p2 - valuable but not blocking
+        - priority:p3 - polish or later
+    validations:
+      required: true

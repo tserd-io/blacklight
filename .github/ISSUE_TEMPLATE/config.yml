@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Project overview
+    url: https://github.com/tserd-io/blacklight#readme
+    about: Start here for setup, usage, and the current project shape.
+  - name: Architecture notes
+    url: https://github.com/tserd-io/blacklight/blob/main/platform/docs/architecture.md
+    about: Review the platform model before proposing architectural changes.
