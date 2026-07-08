@@ -251,6 +251,40 @@ def test_health_command_prints_runtime_config(capsys):
     assert payload["provider_rate_limit_window_seconds"] == 10.0
 
 
+def test_providers_list_command_prints_mock_safe_configuration(capsys):
+    exit_code = main(["providers", "list"])
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["active_provider"] == "mock"
+    providers = {provider["name"]: provider for provider in payload["providers"]}
+    assert providers["mock"]["configured"] is True
+    assert providers["mock"]["selected"] is True
+    assert providers["mock"]["requires_secret"] is False
+    assert providers["openai"]["configured"] is False
+    assert providers["openai"]["requires_secret"] is True
+    assert providers["custom"]["configured"] is False
+
+
+def test_providers_status_command_prints_runtime_readiness(capsys, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://example.com")
+
+    exit_code = main(["providers", "status"])
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["runtime"]["provider"] == "mock"
+    assert payload["providers"]["mock"]["ready"] is True
+    assert payload["providers"]["mock"]["selected"] is True
+    assert payload["providers"]["openai"]["ready"] is False
+    assert payload["providers"]["custom"]["ready"] is False
+    assert payload["local_model"]["runtime"] == "ollama"
+    assert payload["local_model"]["status"] == "unavailable"
+    assert payload["local_model"]["ready"] is False
+
+
 def test_local_model_status_command_prints_readiness(capsys, monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", "https://example.com")
 
