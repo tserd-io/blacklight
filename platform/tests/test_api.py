@@ -219,6 +219,66 @@ def test_metrics_endpoint_returns_expanded_trace_metrics(tmp_path):
     assert payload["by_guardrail_outcome"][0]["guardrail_outcome"] == "rejected"
 
 
+def test_agents_list_endpoint_returns_read_only_agent_summaries():
+    response = TestClient(api.app).get("/api/agents")
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["agents"][0]["agent_id"] == "ticket_classifier_agent"
+    assert payload["agents"][0]["workflow_id"] == "ticket_classifier"
+    assert payload["agents"][0]["output_schema"] == "TicketClassification"
+    assert payload["agents"][0]["links"]["api"] == "/api/agents/ticket_classifier_agent"
+    assert payload["cli_commands"]["list"] == "blacklight agents list"
+    assert (
+        payload["cli_commands"]["show_ticket_classifier"]
+        == "blacklight agents show ticket_classifier_agent"
+    )
+    for command in payload["cli_commands"].values():
+        _assert_cli_command_parseable(command)
+
+
+def test_agent_profile_endpoint_returns_domain_range_and_trace_payload():
+    response = TestClient(api.app).get("/api/agents/ticket_classifier_agent")
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["agent_id"] == "ticket_classifier_agent"
+    assert payload["domain"]["prompt_ids"] == ["ticket_classifier"]
+    assert payload["governed_range"]["output_schema"] == "TicketClassification"
+    assert "range" not in payload
+    assert payload["related_workflow"]["workflow_id"] == "ticket_classifier"
+    assert payload["prompts"][0]["prompt_id"] == "ticket_classifier"
+    assert payload["prompts"][0]["versions"] == [1, 2]
+    assert payload["eval_suite"]["run_api"] == "/api/console/evals/run"
+    assert payload["trace_links"]["recent_traces_api"] == "/api/console/traces"
+    assert payload["review_policy"]["review_queue_api"] == "/api/console/reviews"
+    assert (
+        "domain_boundary"
+        in payload["domain_to_range_trace_contract"]["required_steps"]
+    )
+    assert payload["links"]["self"] == "/api/agents/ticket_classifier_agent"
+    assert payload["cli_commands"]["show"] == (
+        "blacklight agents show ticket_classifier_agent"
+    )
+    for command in payload["cli_commands"].values():
+        _assert_cli_command_parseable(command)
+
+
+def test_agent_profile_endpoint_returns_known_error_for_missing_agent():
+    response = TestClient(api.app).get("/api/agents/missing_agent")
+
+    payload = response.json()
+
+    assert response.status_code == 404
+    assert payload["detail"]["category"] == "agent_not_found"
+    assert payload["detail"]["message"] == "Agent not found: missing_agent"
+    assert payload["detail"]["next_step"] == (
+        "Run `blacklight agents list` and retry with a listed agent_id."
+    )
+
+
 def test_console_dashboard_exposes_demo_and_recent_inspection_links(monkeypatch, tmp_path):
     _patch_seeded_console_stores(monkeypatch, tmp_path)
 

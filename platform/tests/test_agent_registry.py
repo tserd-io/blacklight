@@ -43,6 +43,13 @@ def test_agent_registry_lists_static_definitions():
     assert [agent.agent_id for agent in agents] == ["ticket_classifier_agent"]
 
 
+def test_agent_registry_get_optional_returns_none_for_missing_agent():
+    registry = AgentRegistry()
+
+    assert registry.get_optional("ticket_classifier_agent").agent_id == "ticket_classifier_agent"
+    assert registry.get_optional("missing_agent") is None
+
+
 def test_agent_registry_validates_custom_definition_directory(tmp_path):
     definition = AgentRegistry().get("ticket_classifier_agent").model_dump(mode="json")
     definition["agent_id"] = "custom_ticket_agent"
