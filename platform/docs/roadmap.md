@@ -109,5 +109,6 @@ Milestone 7 final QA was run on July 8, 2026. The smoke path confirmed managed-a
 - Add OpenTelemetry export
 - Add RAG policy-question example
 - Add deployment notes for container platforms
+- Add scheduled or release-gated Windows/macOS CLI smoke checks
 - Add managed enterprise deployment controls for the browser web app
 - Package the optional desktop shell with signing, update, installer, and fleet-managed desktop deployment hardening

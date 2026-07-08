@@ -58,6 +58,7 @@ The demo runs the mock ticket-classification workflow, applies validation and gu
 | Failure handling | [Failure Modes](failure-modes.md) |
 | Design tradeoffs | [Tradeoffs](tradeoffs.md) |
 | Packaging direction | [Desktop Packaging](desktop-packaging.md) |
+| Cross-platform CI | [Cross-Platform CI](cross-platform-ci.md) |
 | Roadmap | [Roadmap](roadmap.md) |
 
 ## Local Signals To Check
