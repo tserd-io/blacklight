@@ -202,9 +202,11 @@ blacklight eval show seed-demo-eval --trace-db-path traces.sqlite3
 blacklight prompts show ticket_classifier
 blacklight eval compare --baseline-version 1 --candidate-version 2
 blacklight health
+blacklight providers list
+blacklight providers status
 ```
 
-Review queue and provider-readiness screens use existing executable equivalents today: `blacklight trace list ...` for reviewable outputs and `blacklight health` for provider configuration status.
+Review queue and provider-readiness screens use executable equivalents today: `blacklight trace list ...` for reviewable outputs, `blacklight health` for runtime configuration, and `blacklight providers status` for provider readiness.
 
 ## Eval Example
 

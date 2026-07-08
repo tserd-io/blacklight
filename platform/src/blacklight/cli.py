@@ -241,18 +241,100 @@ def metrics(args: argparse.Namespace) -> int:
 
 def health(_args: argparse.Namespace) -> int:
     settings = load_settings()
+    _print_json(_health_payload(settings))
+    return 0
+
+
+def _health_payload(settings: Any) -> dict[str, Any]:
+    return {
+        "provider": settings.provider,
+        "model": settings.model,
+        "trace_db_path": settings.trace_db_path,
+        "openai_configured": bool(settings.openai_api_key),
+        "custom_provider_configured": bool(settings.custom_provider_path),
+        "ollama_base_url": settings.ollama_base_url,
+        "provider_timeout_seconds": settings.provider_timeout_seconds,
+        "provider_max_retries": settings.provider_max_retries,
+        "provider_rate_limit_requests": settings.provider_rate_limit_requests,
+        "provider_rate_limit_window_seconds": settings.provider_rate_limit_window_seconds,
+    }
+
+
+def providers_list(_args: argparse.Namespace) -> int:
+    settings = load_settings()
     _print_json(
         {
-            "provider": settings.provider,
-            "model": settings.model,
-            "trace_db_path": settings.trace_db_path,
-            "openai_configured": bool(settings.openai_api_key),
-            "custom_provider_configured": bool(settings.custom_provider_path),
-            "ollama_base_url": settings.ollama_base_url,
-            "provider_timeout_seconds": settings.provider_timeout_seconds,
-            "provider_max_retries": settings.provider_max_retries,
-            "provider_rate_limit_requests": settings.provider_rate_limit_requests,
-            "provider_rate_limit_window_seconds": settings.provider_rate_limit_window_seconds,
+            "active_provider": settings.provider,
+            "providers": [
+                {
+                    "name": "mock",
+                    "configured": True,
+                    "selected": settings.provider == "mock",
+                    "requires_secret": False,
+                    "summary": "Ready by default for demos, tests, and CI.",
+                },
+                {
+                    "name": "openai",
+                    "configured": bool(settings.openai_api_key),
+                    "selected": settings.provider == "openai",
+                    "requires_secret": True,
+                    "summary": "Uses OPENAI_API_KEY from private environment settings.",
+                },
+                {
+                    "name": "custom",
+                    "configured": bool(settings.custom_provider_path),
+                    "selected": settings.provider == "custom",
+                    "requires_secret": False,
+                    "summary": "Uses LLM_CUSTOM_PROVIDER import path for user-owned providers.",
+                },
+            ],
+        }
+    )
+    return 0
+
+
+def providers_status(_args: argparse.Namespace) -> int:
+    settings = load_settings()
+    local_status = local_model_status(settings).as_dict()
+    _print_json(
+        {
+            "runtime": _health_payload(settings),
+            "providers": {
+                "mock": {
+                    "configured": True,
+                    "ready": True,
+                    "selected": settings.provider == "mock",
+                    "message": "Mock provider is ready without live credentials.",
+                },
+                "openai": {
+                    "configured": bool(settings.openai_api_key),
+                    "ready": bool(settings.openai_api_key),
+                    "selected": settings.provider == "openai",
+                    "message": (
+                        "OpenAI provider key is configured."
+                        if settings.openai_api_key
+                        else "OpenAI provider requires OPENAI_API_KEY in a private environment."
+                    ),
+                },
+                "custom": {
+                    "configured": bool(settings.custom_provider_path),
+                    "ready": bool(settings.custom_provider_path),
+                    "selected": settings.provider == "custom",
+                    "message": (
+                        "Custom provider import path is configured."
+                        if settings.custom_provider_path
+                        else "Custom provider requires LLM_CUSTOM_PROVIDER."
+                    ),
+                },
+            },
+            "local_model": {
+                "runtime": local_status["runtime"],
+                "configured": local_status["configured"],
+                "selected": local_status["selected"],
+                "status": local_status["status"],
+                "ready": local_status["ready"],
+                "message": local_status["status_message"],
+            },
         }
     )
     return 0
@@ -488,6 +570,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     health_parser = subparsers.add_parser("health", help="Print local runtime configuration.")
     health_parser.set_defaults(func=health)
+
+    providers_parser = subparsers.add_parser("providers", help="Inspect provider readiness.")
+    providers_subparsers = providers_parser.add_subparsers(
+        dest="providers_command",
+        required=True,
+    )
+    providers_list_parser = providers_subparsers.add_parser(
+        "list",
+        help="List supported providers and configuration state.",
+    )
+    providers_list_parser.set_defaults(func=providers_list)
+    providers_status_parser = providers_subparsers.add_parser(
+        "status",
+        help="Show provider and local-model readiness.",
+    )
+    providers_status_parser.set_defaults(func=providers_status)
 
     local_model_parser = subparsers.add_parser(
         "local-model",
