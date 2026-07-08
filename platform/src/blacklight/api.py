@@ -5,7 +5,7 @@ import os
 import uuid
 from html import escape
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -63,6 +63,7 @@ CONSOLE_NAV = [
     ("dashboard", "Dashboard", "/console"),
     ("first-run", "First Run", "/console/first-run"),
     ("workflows", "Workflows", "/console/workflows"),
+    ("agents", "Agents", "/console/agents"),
     ("runs", "Runs", "/console/runs"),
     ("traces", "Traces", "/console/traces"),
     ("evals", "Evals", "/console/evals"),
@@ -1062,6 +1063,118 @@ def _render_console_workflows() -> HTMLResponse:
     return _console_shell(active="workflows", title="Workflows", body=body)
 
 
+def _html_bullets(items: list[str]) -> str:
+    return "".join(f"<li>{escape(item)}</li>" for item in items)
+
+
+def _render_console_agents() -> HTMLResponse:
+    agents = AgentRegistry().list()
+    rows = "\n".join(
+        (
+            f"""<tr>
+  <td data-label="Agent"><a href="/console/agents/{quote(agent.agent_id, safe='')}">{escape(agent.display_name)}</a><br><code>{escape(agent.agent_id)}</code></td>
+  <td data-label="Workflow">{escape(agent.workflow_id)}</td>
+  <td data-label="Schema">{escape(agent.governed_range.output_schema)}</td>
+  <td data-label="Prompt">{escape(", ".join(agent.domain.prompt_ids))}</td>
+  <td data-label="Inspect"><a href="/console/agents/{quote(agent.agent_id, safe='')}">Open Profile</a></td>
+</tr>"""
+        )
+        for agent in agents
+    )
+    if not rows:
+        rows = '<tr><td colspan="5" class="empty">No managed agents are packaged.</td></tr>'
+    body = f"""
+<h1>Agents</h1>
+<p class="muted">Read-only managed agent profiles for governed workflow behavior.</p>
+<section class="grid">
+  {_console_command_panel("blacklight agents list")}
+  {_console_command_panel("blacklight agents show ticket_classifier_agent")}
+</section>
+<table>
+  <thead><tr><th>Agent</th><th>Workflow</th><th>Schema</th><th>Prompt</th><th>Inspect</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"""
+    return _console_shell(active="agents", title="Agents", body=body)
+
+
+def _render_console_agent_profile(agent_id: str) -> HTMLResponse:
+    agent = AgentRegistry().get_optional(agent_id)
+    if agent is None:
+        raise HTTPException(
+            status_code=404,
+            detail=agent_not_found_error(agent_id).as_payload()["error"],
+        )
+    prompt_id = agent.domain.prompt_ids[0]
+    prompt_versions = ", ".join(
+        str(version) for version in agent.domain.prompt_versions[prompt_id]
+    )
+    trace_steps = "".join(
+        f"<li><code>{escape(step)}</code></li>" for step in agent.trace_contract.required_steps
+    )
+    evidence_fields = "".join(
+        f"<li><code>{escape(field)}</code></li>" for field in agent.trace_contract.evidence_fields
+    )
+    body = f"""
+<h1>{escape(agent.display_name)}</h1>
+<p class="muted">{escape(agent.description)}</p>
+<div class="toolbar">
+  <a class="button" href="/console/workflows">Demo Run</a>
+  <a class="button secondary" href="/console/prompts">Prompt</a>
+  <a class="button secondary" href="/console/evals">Evals</a>
+  <a class="button secondary" href="/console/traces">Traces</a>
+  <a class="button secondary" href="/console/review">Review Queue</a>
+  <form method="post" action="/console/run-demo"><button type="submit">Run Demo</button></form>
+</div>
+<section class="grid">
+  <div class="panel"><h2>Agent</h2><p><code>{escape(agent.agent_id)}</code></p><p>Version {agent.version}</p></div>
+  <div class="panel"><h2>Workflow</h2><p><code>{escape(agent.workflow_id)}</code></p><p><a href="/console/workflows">Open workflow</a></p></div>
+  <div class="panel"><h2>Prompt</h2><p><code>{escape(prompt_id)}</code> v{escape(prompt_versions)}</p><p><a href="/console/prompts">Open prompt registry</a></p></div>
+  <div class="panel"><h2>Output Schema</h2><p><code>{escape(agent.governed_range.output_schema)}</code></p></div>
+</section>
+<section class="grid">
+  <div class="panel">
+    <h2>Domain</h2>
+    <p>Retrieval surface</p>
+    <ul>{_html_bullets(agent.domain.retrieval_surface)}</ul>
+    <p>Context inputs</p>
+    <ul>{_html_bullets(agent.domain.context_inputs)}</ul>
+    <p>Context boundaries</p>
+    <ul>{_html_bullets(agent.domain.context_boundaries)}</ul>
+    <p>Provider policy</p>
+    <p>{escape(agent.domain.provider_policy)}</p>
+    <p>Limits</p>
+    <ul>{_html_bullets(agent.domain.limits)}</ul>
+  </div>
+  <div class="panel">
+    <h2>Range</h2>
+    <p>Governed touch surface</p>
+    <ul>{_html_bullets(agent.governed_range.touch_surface)}</ul>
+    <p>Output expectations</p>
+    <ul>{_html_bullets(agent.governed_range.output_expectations)}</ul>
+    <p>Allowed side effects</p>
+    <ul>{_html_bullets(agent.governed_range.allowed_side_effects or ["none"])}</ul>
+    <p>Review requirements</p>
+    <ul>{_html_bullets(agent.governed_range.review_requirements)}</ul>
+    <p>Guardrail enforcement</p>
+    <ul>{_html_bullets(agent.governed_range.guardrail_enforcement)}</ul>
+  </div>
+</section>
+<section class="grid">
+  <div class="panel">
+    <h2>Domain-To-Range Trace</h2>
+    <p>Required steps</p>
+    <ul>{trace_steps}</ul>
+    <p>Evidence fields</p>
+    <ul>{evidence_fields}</ul>
+    <p><a href="/console/traces">Open traces</a> | <a href="/console/evals">Open evals</a> | <a href="/console/review">Open review queue</a></p>
+  </div>
+  {_console_command_panel(f"blacklight agents show {agent.agent_id}")}
+  {_console_command_panel(f"blacklight agents show {agent.agent_id} --json")}
+  {_console_command_panel(f"blacklight prompts show {prompt_id}")}
+</section>"""
+    return _console_shell(active="agents", title=agent.display_name, body=body)
+
+
 def _render_console_runs() -> HTMLResponse:
     traces = trace_store.list_recent(limit=50)
     sessions: dict[str, dict[str, Any]] = {}
@@ -1552,6 +1665,16 @@ def console_run_demo() -> HTMLResponse:
 @app.get("/console/workflows", response_class=HTMLResponse)
 def console_workflows() -> HTMLResponse:
     return _render_console_workflows()
+
+
+@app.get("/console/agents", response_class=HTMLResponse)
+def console_agents() -> HTMLResponse:
+    return _render_console_agents()
+
+
+@app.get("/console/agents/{agent_id}", response_class=HTMLResponse)
+def console_agent_profile(agent_id: str) -> HTMLResponse:
+    return _render_console_agent_profile(agent_id)
 
 
 @app.get("/console/runs", response_class=HTMLResponse)

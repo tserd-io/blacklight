@@ -303,6 +303,7 @@ def test_console_surfaces_render_navigation_and_cli_equivalents(monkeypatch, tmp
     expected = {
         "/console/first-run": "First Run",
         "/console/workflows": "blacklight classify",
+        "/console/agents": "blacklight agents list",
         "/console/runs": "blacklight session show",
         "/console/traces": "blacklight trace list",
         "/console/evals": "blacklight eval list",
@@ -319,6 +320,36 @@ def test_console_surfaces_render_navigation_and_cli_equivalents(monkeypatch, tmp
         assert response.status_code == 200
         assert "Blacklight Studio" in response.text
         assert expected_text in response.text
+
+
+def test_console_agents_list_links_to_read_only_profile():
+    response = TestClient(api.app).get("/console/agents")
+
+    assert response.status_code == 200
+    assert "Agents" in response.text
+    assert "Ticket Classifier Agent" in response.text
+    assert "/console/agents/ticket_classifier_agent" in response.text
+    assert "blacklight agents list" in response.text
+    assert "blacklight agents show ticket_classifier_agent" in response.text
+
+
+def test_console_agent_profile_shows_domain_range_trace_links_and_cli():
+    response = TestClient(api.app).get("/console/agents/ticket_classifier_agent")
+
+    assert response.status_code == 200
+    assert "Ticket Classifier Agent" in response.text
+    assert "Domain" in response.text
+    assert "Range" in response.text
+    assert "Domain-To-Range Trace" in response.text
+    assert "/console/prompts" in response.text
+    assert "/console/evals" in response.text
+    assert "/console/traces" in response.text
+    assert "/console/review" in response.text
+    assert "/console/workflows" in response.text
+    assert "/console/run-demo" in response.text
+    assert "blacklight agents show ticket_classifier_agent" in response.text
+    assert "blacklight agents show ticket_classifier_agent --json" in response.text
+    assert "blacklight prompts show ticket_classifier" in response.text
 
 
 def test_console_run_demo_links_result_to_trace_and_session(monkeypatch, tmp_path):
