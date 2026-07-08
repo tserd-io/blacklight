@@ -22,8 +22,10 @@ openai = [
   "openai>=1.40",
 ]
 dev = [
+  "build>=1.2",
   "pytest>=8.0",
   "ruff>=0.5",
+  "twine>=5.1",
 ]
 
 [project.scripts]

@@ -50,3 +50,29 @@ jobs:
         run: blacklight providers status
       - name: Smoke local runtime command - blacklight local-model status
         run: blacklight local-model status
+
+  package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform
+    env:
+      LLM_PROVIDER: mock
+      OLLAMA_BASE_URL: https://example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package validation tools
+        run: pip install -e ".[dev]"
+      - name: Build source and wheel distributions
+        run: python -m build
+      - name: Validate package metadata
+        run: python -m twine check dist/*
+      - name: Install built wheel
+        run: pip install --force-reinstall dist/*.whl
+      - name: Smoke installed console script
+        run: blacklight health
+      - name: Smoke packaged agent data
+        run: python -c "from blacklight.agents import AgentRegistry; assert AgentRegistry().get('ticket_classifier_agent').agent_id == 'ticket_classifier_agent'"
