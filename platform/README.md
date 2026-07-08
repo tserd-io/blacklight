@@ -199,6 +199,8 @@ blacklight trace list --trace-db-path traces.sqlite3 --limit 10
 blacklight trace show seed-demo:billing-success --trace-db-path traces.sqlite3
 blacklight eval run --trace-db-path traces.sqlite3 --session-id eval-demo
 blacklight eval show seed-demo-eval --trace-db-path traces.sqlite3
+blacklight agents list
+blacklight agents show ticket_classifier_agent
 blacklight prompts show ticket_classifier
 blacklight eval compare --baseline-version 1 --candidate-version 2
 blacklight health
