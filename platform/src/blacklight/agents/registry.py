@@ -107,6 +107,11 @@ class AgentRegistry:
         payload = self._load_definition_file(agent_id)
         return AgentDefinition.model_validate(payload)
 
+    def get_optional(self, agent_id: str) -> AgentDefinition | None:
+        if agent_id not in self._list_agent_ids():
+            return None
+        return self.get(agent_id)
+
     def _load_definition_file(self, agent_id: str) -> dict:
         filename = f"{agent_id}.json"
         if self.definition_dir:

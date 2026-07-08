@@ -11,7 +11,13 @@ from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from blacklight.errors import GuardrailValidationError, describe_exception, session_not_found_error
+from blacklight.agents import AgentDefinition, AgentRegistry
+from blacklight.errors import (
+    GuardrailValidationError,
+    agent_not_found_error,
+    describe_exception,
+    session_not_found_error,
+)
 from blacklight.evals.runner import run_ticket_classification_eval
 from blacklight.examples.ticket_classifier import TicketClassifier
 from blacklight.local_models import (
@@ -318,6 +324,95 @@ def _cli_affordance(primary: str, **commands: str) -> dict[str, Any]:
         "cli_commands": named_commands,
         "cli": named_commands,
     }
+
+
+def _agent_cli_commands(agent: AgentDefinition) -> dict[str, str]:
+    prompt_id = agent.domain.prompt_ids[0]
+    workflow_command = (
+        "blacklight classify --subject "
+        f"{_quote_cli_arg('Refund request')} "
+        "--body "
+        f"{_quote_cli_arg('Customer asks for a refund after duplicate billing.')}"
+    )
+    return {
+        "show": f"blacklight agents show {agent.agent_id}",
+        "show_json": f"blacklight agents show {agent.agent_id} --json",
+        "list": "blacklight agents list",
+        "workflow": workflow_command,
+        "prompt": f"blacklight prompts show {prompt_id}",
+        "eval": "blacklight eval run --session-id agent-definition-eval",
+    }
+
+
+def _agent_summary_payload(agent: AgentDefinition) -> dict[str, Any]:
+    return {
+        "agent_id": agent.agent_id,
+        "display_name": agent.display_name,
+        "version": agent.version,
+        "active": agent.active,
+        "workflow_id": agent.workflow_id,
+        "description": agent.description,
+        "tags": agent.tags,
+        "output_schema": agent.governed_range.output_schema,
+        "prompt_ids": agent.domain.prompt_ids,
+        "links": {
+            "api": f"/api/agents/{agent.agent_id}",
+            "workflow_api": f"/api/console/workflows/{agent.workflow_id}",
+        },
+        "cli_command": f"blacklight agents show {agent.agent_id}",
+    }
+
+
+def _agent_profile_payload(agent: AgentDefinition) -> dict[str, Any]:
+    commands = _agent_cli_commands(agent)
+    payload = {
+        **agent.model_dump(mode="json"),
+        "related_workflow": {
+            "workflow_id": agent.workflow_id,
+            "api": f"/api/console/workflows/{agent.workflow_id}",
+            "run_api": f"/api/console/workflows/{agent.workflow_id}/run",
+            "console": "/console/workflows",
+        },
+        "prompts": [
+            {
+                "prompt_id": prompt_id,
+                "versions": versions,
+                "api": f"/api/console/prompts/{prompt_id}",
+                "cli_command": f"blacklight prompts show {prompt_id}",
+            }
+            for prompt_id, versions in sorted(agent.domain.prompt_versions.items())
+        ],
+        "eval_suite": {
+            "name": "ticket-classification public-safe eval suite",
+            "api": "/api/console/evals",
+            "run_api": "/api/console/evals/run",
+            "cli_command": commands["eval"],
+        },
+        "trace_links": {
+            "recent_traces_api": "/api/console/traces",
+            "recent_runs_api": "/api/console/runs",
+            "session_history_api_template": "/api/sessions/{session_id}",
+            "trace_detail_api_template": "/api/console/traces/{request_id}",
+        },
+        "review_policy": {
+            "requirements": agent.governed_range.review_requirements,
+            "guardrail_enforcement": agent.governed_range.guardrail_enforcement,
+            "review_queue_api": "/api/console/reviews",
+            "review_queue_console": "/console/review",
+        },
+        "domain_to_range_trace_contract": agent.trace_contract.model_dump(mode="json"),
+        "links": {
+            "self": f"/api/agents/{agent.agent_id}",
+            "agents": "/api/agents",
+            "workflow": f"/api/console/workflows/{agent.workflow_id}",
+            "prompts": "/api/console/prompts",
+            "evals": "/api/console/evals",
+            "traces": "/api/console/traces",
+            "reviews": "/api/console/reviews",
+        },
+    }
+    payload.update(_cli_affordance(commands["show"], **commands))
+    return payload
 
 
 def _prompt_payload(prompt_id: str, version: int | None = None) -> dict[str, Any]:
@@ -1512,6 +1607,38 @@ def console_dashboard_json(limit: int = Query(default=5, ge=1, le=50)) -> dict[s
 @app.get("/api/console/dashboard")
 def console_dashboard_json_alias(limit: int = Query(default=5, ge=1, le=50)) -> dict[str, Any]:
     return _dashboard_payload(limit=limit)
+
+
+@app.get("/api/agents")
+def agents_list_json() -> dict[str, Any]:
+    agents = AgentRegistry().list()
+    payload = {
+        "agents": [_agent_summary_payload(agent) for agent in agents],
+        "links": {
+            "self": "/api/agents",
+            "console_workflows": "/console/workflows",
+        },
+    }
+    payload.update(
+        _cli_affordance(
+            "blacklight agents list",
+            list="blacklight agents list",
+            show_ticket_classifier="blacklight agents show ticket_classifier_agent",
+        )
+    )
+    return payload
+
+
+@app.get("/api/agents/{agent_id}")
+def agent_profile_json(agent_id: str) -> dict[str, Any]:
+    registry = AgentRegistry()
+    agent = registry.get_optional(agent_id)
+    if agent is None:
+        raise HTTPException(
+            status_code=404,
+            detail=agent_not_found_error(agent_id).as_payload()["error"],
+        )
+    return _agent_profile_payload(agent)
 
 
 @app.get("/api/console/first-run")
