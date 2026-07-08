@@ -84,6 +84,19 @@ Milestone 6 is complete as a business-user productization approval pass. The pro
 
 Milestone 6 final QA was run on July 6, 2026. Docker and live Ollama runtime smoke checks remain environment-dependent; the local QA pass verified configuration, status reporting, and recovery guidance without downloading model weights or requiring live provider credentials.
 
+## Milestone 7 Completion
+
+Milestone 7 is complete as a managed-agent foundation pass. The project now supports:
+
+- a packaged `ticket_classifier_agent` definition with explicit domain, governed range, and trace contract fields
+- read-only `blacklight agents list` and `blacklight agents show ticket_classifier_agent` CLI inspection
+- read-only `/api/agents` and `/api/agents/ticket_classifier_agent` profile payloads
+- read-only `/console/agents` and `/console/agents/ticket_classifier_agent` browser profile surfaces
+- documentation for workflow vs agent vs future graph node, domain/range contracts, traceability, graph-readiness, non-goals, and safety constraints
+- final QA checks for linting, tests, agent CLI smoke, agent API smoke, console profile smoke, docs accuracy, and no-live-key default behavior
+
+Milestone 7 final QA was run on July 8, 2026. The smoke path confirmed managed-agent inspection works in mock mode with `openai_configured=false` and no live provider key.
+
 ## Next
 
 - Prepare the productization branch for pull-request review and approval

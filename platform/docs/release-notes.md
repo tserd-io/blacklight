@@ -142,3 +142,31 @@ Confirmed behavior:
 Documented limitation:
 
 - Live Docker/Ollama model installation was not required for this QA pass. The branch verifies local model configuration and status behavior while leaving model downloads as an opt-in environment-specific step.
+
+### Milestone 7 Final QA Record
+
+Milestone 7 final QA was run on July 8, 2026 for the managed-agents foundation branch.
+
+Passed checks:
+
+- `ruff check .`
+- `pytest`
+- `git diff --check`
+- `blacklight agents list`
+- `blacklight agents show ticket_classifier_agent`
+- `blacklight agents show ticket_classifier_agent --json`
+- `blacklight health`
+- FastAPI TestClient smoke checks for `/api/agents`, `/api/agents/ticket_classifier_agent`, `/console/agents`, and `/console/agents/ticket_classifier_agent`
+
+Confirmed behavior:
+
+- `ticket_classifier_agent` loads as the first packaged managed agent.
+- CLI output shows domain, governed range, prompt versions, review requirements, guardrail enforcement, and domain-to-range traceability.
+- API profile payload exposes domain, `governed_range`, related workflow, prompt versions, eval links, trace links, review policy, domain-to-range trace contract, and CLI commands.
+- Console profile surfaces link to prompts, evals, traces, review queue, workflows, and demo run.
+- Docs explain workflow vs managed agent vs future graph node, inspectable-before-editable design, graph-readiness, non-goals, and safety constraints.
+- Default runtime remains `provider=mock`, with `openai_configured=false` and no live provider key required.
+
+Documented limitation:
+
+- Milestone 7 remains intentionally read-only. Agent editing, promotion, graph execution, and managed-agent run behavior are deferred to later milestones.
