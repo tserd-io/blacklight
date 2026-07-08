@@ -1,0 +1,103 @@
+{
+  "agent_id": "ticket_classifier_agent",
+  "version": 1,
+  "display_name": "Ticket Classifier Agent",
+  "description": "Managed-agent definition for the synthetic support-ticket classifier workflow.",
+  "workflow_id": "ticket_classifier",
+  "active": true,
+  "tags": ["support", "classification", "managed-agent", "synthetic"],
+  "domain": {
+    "retrieval_surface": [
+      "approved static sample support-ticket context",
+      "public-safe synthetic eval fixtures"
+    ],
+    "context_inputs": [
+      "ticket subject",
+      "ticket body",
+      "session id",
+      "idempotency key when supplied by the caller"
+    ],
+    "context_boundaries": [
+      "use only caller-provided ticket subject and body",
+      "use only bundled public-safe fixtures for evals",
+      "do not retrieve private customer records",
+      "do not browse external systems"
+    ],
+    "tools": [],
+    "provider_policy": "mock-provider-first; optional configured providers must use the shared provider factory and reliability wrapper",
+    "prompt_ids": ["ticket_classifier"],
+    "prompt_versions": {
+      "ticket_classifier": [1, 2]
+    },
+    "limits": [
+      "classification only",
+      "no side-effecting tool calls",
+      "no external retrieval",
+      "no direct customer communication",
+      "no mutation of source records"
+    ]
+  },
+  "governed_range": {
+    "touch_surface": [
+      "read-only classification output metadata",
+      "trace rows written through the shared trace store",
+      "eval run and eval case metrics written during deterministic evals"
+    ],
+    "output_schema": "TicketClassification",
+    "output_expectations": [
+      "category",
+      "severity",
+      "confidence",
+      "rationale",
+      "needs_review",
+      "trace contract references"
+    ],
+    "allowed_side_effects": [],
+    "review_requirements": [
+      "route needs_review=true outputs to human review surfaces",
+      "keep rejected validation outputs out of downstream automation",
+      "declare review routing policy without expanding queue behavior in this milestone"
+    ],
+    "guardrail_enforcement": [
+      "Pydantic schema validation",
+      "guardrail outcome recorded as accepted, needs_review, or rejected",
+      "PII and sensitive-text checks can force review or rejection"
+    ]
+  },
+  "trace_contract": {
+    "required_steps": [
+      "domain_boundary",
+      "run_inputs",
+      "context_bundle",
+      "prompt_provider_call",
+      "validation",
+      "guardrail_decision",
+      "range_output",
+      "review_export_touch_decision",
+      "eval_evidence"
+    ],
+    "evidence_fields": [
+      "agent_id",
+      "agent_version",
+      "workflow_id",
+      "session_id",
+      "request_id",
+      "prompt_id",
+      "prompt_version",
+      "provider",
+      "model",
+      "validation_passed",
+      "guardrail_outcome",
+      "error_category"
+    ],
+    "eval_evidence": [
+      "eval_run_id",
+      "fixture_name",
+      "case_id",
+      "trace_request_id",
+      "accuracy",
+      "schema_validity_rate",
+      "needs_review_rate"
+    ]
+  }
+}
