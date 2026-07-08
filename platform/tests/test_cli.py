@@ -299,6 +299,78 @@ def test_local_model_status_command_prints_readiness(capsys, monkeypatch):
     assert payload["fallback"]["configured"] is False
 
 
+def test_agents_list_command_prints_human_readable_summary(capsys):
+    exit_code = main(["agents", "list"])
+
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Managed Agents" in output
+    assert "ticket_classifier_agent" in output
+    assert "workflow: ticket_classifier" in output
+    assert "blacklight agents show ticket_classifier_agent" in output
+
+
+def test_agents_list_json_command_prints_stable_payload(capsys):
+    exit_code = main(["agents", "list", "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["agents"][0]["agent_id"] == "ticket_classifier_agent"
+    assert payload["agents"][0]["workflow_id"] == "ticket_classifier"
+    assert payload["agents"][0]["output_schema"] == "TicketClassification"
+    assert payload["agents"][0]["cli_command"] == "blacklight agents show ticket_classifier_agent"
+    assert payload["cli_commands"]["list"] == "blacklight agents list"
+
+
+def test_agents_show_command_prints_domain_range_and_trace_contract(capsys):
+    exit_code = main(["agents", "show", "ticket_classifier_agent"])
+
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Ticket Classifier Agent (ticket_classifier_agent)" in output
+    assert "Domain" in output
+    assert "Retrieval surface:" in output
+    assert "Governed Range" in output
+    assert "Output schema: TicketClassification" in output
+    assert "Domain-To-Range Traceability" in output
+    assert "guardrail_decision" in output
+    assert "blacklight agents show ticket_classifier_agent --json" in output
+
+
+def test_agents_show_json_command_prints_stable_payload(capsys):
+    exit_code = main(["agents", "show", "ticket_classifier_agent", "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["agent_id"] == "ticket_classifier_agent"
+    assert payload["workflow_id"] == "ticket_classifier"
+    assert payload["domain"]["prompt_ids"] == ["ticket_classifier"]
+    assert payload["domain"]["prompt_versions"]["ticket_classifier"] == [1, 2]
+    assert payload["governed_range"]["output_schema"] == "TicketClassification"
+    assert "guardrail_decision" in payload["trace_contract"]["required_steps"]
+    assert payload["cli_commands"]["show"] == "blacklight agents show ticket_classifier_agent"
+    assert payload["cli_commands"]["show_json"] == (
+        "blacklight agents show ticket_classifier_agent --json"
+    )
+
+
+def test_agents_show_missing_agent_prints_known_error(capsys):
+    exit_code = main(["agents", "show", "missing_agent"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.err)
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert payload["error"]["category"] == "agent_not_found"
+    assert payload["error"]["message"] == "Agent not found: missing_agent"
+    assert "blacklight agents list" in payload["error"]["next_step"]
+
+
 def test_prompts_list_command_prints_prompt_metadata(capsys):
     exit_code = main(["prompts", "list"])
 

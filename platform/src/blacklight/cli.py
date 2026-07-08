@@ -7,8 +7,10 @@ import sys
 import uuid
 from typing import Any
 
+from blacklight.agents import AgentDefinition, AgentRegistry
 from blacklight.demo_seed import seed_demo_data
 from blacklight.errors import (
+    agent_not_found_error,
     describe_exception,
     is_known_error,
     session_not_found_error,
@@ -42,6 +44,10 @@ def _print_json(payload: dict[str, Any]) -> None:
 
 def _print_error(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, indent=2), file=sys.stderr)
+
+
+def _print_text(text: str) -> None:
+    print(text)
 
 
 def _quote_command_arg(value: str) -> str:
@@ -346,6 +352,142 @@ def local_model_status_command(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _agent_payload(agent: AgentDefinition) -> dict[str, Any]:
+    payload = agent.model_dump(mode="json")
+    payload["cli_commands"] = {
+        "show": f"blacklight agents show {agent.agent_id}",
+        "show_json": f"blacklight agents show {agent.agent_id} --json",
+        "workflow": f"blacklight classify --subject {json.dumps(DEMO_SUBJECT)} --body {json.dumps(DEMO_BODY)}",
+        "prompt": " ".join(
+            [
+                "blacklight",
+                "prompts",
+                "show",
+                agent.domain.prompt_ids[0],
+            ]
+        ),
+        "eval": "blacklight eval run --session-id agent-definition-eval",
+    }
+    return payload
+
+
+def _format_bullets(items: list[str]) -> str:
+    return "\n".join(f"  - {item}" for item in items)
+
+
+def _format_prompt_versions(agent: AgentDefinition) -> str:
+    return "\n".join(
+        f"  - {prompt_id}: {', '.join(str(version) for version in versions)}"
+        for prompt_id, versions in sorted(agent.domain.prompt_versions.items())
+    )
+
+
+def _format_agent_summary(agent: AgentDefinition) -> str:
+    return "\n".join(
+        [
+            f"{agent.display_name} ({agent.agent_id})",
+            f"Version: {agent.version}",
+            f"Workflow: {agent.workflow_id}",
+            f"Active: {str(agent.active).lower()}",
+            f"Description: {agent.description}",
+            "",
+            "Domain",
+            "Retrieval surface:",
+            _format_bullets(agent.domain.retrieval_surface),
+            "Context inputs:",
+            _format_bullets(agent.domain.context_inputs),
+            "Context boundaries:",
+            _format_bullets(agent.domain.context_boundaries),
+            "Tools:",
+            _format_bullets(agent.domain.tools or ["none"]),
+            f"Provider policy: {agent.domain.provider_policy}",
+            "Prompt versions:",
+            _format_prompt_versions(agent),
+            "Limits:",
+            _format_bullets(agent.domain.limits),
+            "",
+            "Governed Range",
+            "Touch surface:",
+            _format_bullets(agent.governed_range.touch_surface),
+            f"Output schema: {agent.governed_range.output_schema}",
+            "Output expectations:",
+            _format_bullets(agent.governed_range.output_expectations),
+            "Allowed side effects:",
+            _format_bullets(agent.governed_range.allowed_side_effects or ["none"]),
+            "Review requirements:",
+            _format_bullets(agent.governed_range.review_requirements),
+            "Guardrail enforcement:",
+            _format_bullets(agent.governed_range.guardrail_enforcement),
+            "",
+            "Domain-To-Range Traceability",
+            "Required steps:",
+            _format_bullets(agent.trace_contract.required_steps),
+            "Evidence fields:",
+            _format_bullets(agent.trace_contract.evidence_fields),
+            "Eval evidence:",
+            _format_bullets(agent.trace_contract.eval_evidence),
+            "",
+            "Next steps",
+            f"  - blacklight agents show {agent.agent_id} --json",
+            f"  - blacklight prompts show {agent.domain.prompt_ids[0]}",
+            "  - blacklight eval run --session-id agent-definition-eval",
+        ]
+    )
+
+
+def agents_list(args: argparse.Namespace) -> int:
+    agents = AgentRegistry().list()
+    payload = {
+        "agents": [
+            {
+                "agent_id": agent.agent_id,
+                "display_name": agent.display_name,
+                "version": agent.version,
+                "active": agent.active,
+                "workflow_id": agent.workflow_id,
+                "output_schema": agent.governed_range.output_schema,
+                "prompt_ids": agent.domain.prompt_ids,
+                "cli_command": f"blacklight agents show {agent.agent_id}",
+            }
+            for agent in agents
+        ],
+        "cli_commands": {
+            "list": "blacklight agents list",
+            "show_ticket_classifier": "blacklight agents show ticket_classifier_agent",
+        },
+    }
+    if args.json_output:
+        _print_json(payload)
+        return 0
+    lines = ["Managed Agents", ""]
+    for agent in payload["agents"]:
+        lines.extend(
+            [
+                f"- {agent['agent_id']} v{agent['version']} ({agent['display_name']})",
+                f"  workflow: {agent['workflow_id']}",
+                f"  output schema: {agent['output_schema']}",
+                f"  inspect: {agent['cli_command']}",
+            ]
+        )
+    lines.extend(["", "Next steps", "  - blacklight agents show ticket_classifier_agent"])
+    _print_text("\n".join(lines))
+    return 0
+
+
+def agents_show(args: argparse.Namespace) -> int:
+    registry = AgentRegistry()
+    if args.agent_id not in {agent.agent_id for agent in registry.list()}:
+        _print_error(agent_not_found_error(args.agent_id).as_payload())
+        return 1
+    agent = registry.get(args.agent_id)
+    payload = _agent_payload(agent)
+    if args.json_output:
+        _print_json(payload)
+        return 0
+    _print_text(_format_agent_summary(agent))
+    return 0
+
+
 def prompts_list(_args: argparse.Namespace) -> int:
     prompts = PromptRegistry().list()
     _print_json(
@@ -613,6 +755,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
     )
     seed_demo_parser.set_defaults(func=seed_demo)
+
+    agents_parser = subparsers.add_parser("agents", help="Inspect managed agent definitions.")
+    agents_subparsers = agents_parser.add_subparsers(dest="agents_command", required=True)
+    agents_list_parser = agents_subparsers.add_parser("list", help="List managed agents.")
+    agents_list_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Print stable structured JSON.",
+    )
+    agents_list_parser.set_defaults(func=agents_list)
+    agents_show_parser = agents_subparsers.add_parser("show", help="Show one managed agent.")
+    agents_show_parser.add_argument("agent_id", help="Agent id to inspect.")
+    agents_show_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Print stable structured JSON.",
+    )
+    agents_show_parser.set_defaults(func=agents_show)
 
     prompts_parser = subparsers.add_parser("prompts", help="Inspect prompt templates.")
     prompts_subparsers = prompts_parser.add_subparsers(dest="prompts_command", required=True)

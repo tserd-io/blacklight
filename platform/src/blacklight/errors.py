@@ -48,6 +48,15 @@ def session_not_found_error(session_id: str) -> ErrorDetail:
     )
 
 
+def agent_not_found_error(agent_id: str) -> ErrorDetail:
+    return ErrorDetail(
+        category="agent_not_found",
+        message=f"Agent not found: {agent_id}",
+        likely_cause="No packaged agent definition exists for that agent id.",
+        next_step="Run `blacklight agents list` and retry with a listed agent_id.",
+    )
+
+
 def describe_exception(exc: Exception) -> ErrorDetail:
     if isinstance(exc, ProviderConfigurationError):
         return ErrorDetail(
