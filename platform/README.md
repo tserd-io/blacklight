@@ -25,6 +25,7 @@ Blacklight Studio keeps those ideas small enough to read quickly while still run
 - [src/blacklight/evals/runner.py](src/blacklight/evals/runner.py): deterministic regression evals
 - [src/blacklight/observability/storage.py](src/blacklight/observability/storage.py): SQLite trace store and metrics
 - [docs/architecture.md](docs/architecture.md): component boundaries and request flow
+- [docs/managed-agents.md](docs/managed-agents.md): managed agents, domain/range contracts, and graph-readiness
 - [docs/create-your-own-workflow.md](docs/create-your-own-workflow.md): guide for adapting the starter to a new task
 - [docs/tradeoffs.md](docs/tradeoffs.md): what is intentionally simplified
 - [docs/operational-cost-and-ownership.md](docs/operational-cost-and-ownership.md): cost and ownership model for regular live runs
@@ -42,6 +43,7 @@ Blacklight Studio keeps those ideas small enough to read quickly while still run
 - SQLite traces for latency, tokens, estimated cost, validation, guardrail outcome, and provider failure categories
 - Persisted eval run/case metrics linked back to trace records
 - CLI commands for guided demos, classification, evals, metrics, health, prompts, and traces
+- Read-only managed-agent inspection through CLI, API, and console surfaces
 - FastAPI surface for the ticket-classification workflow
 
 ## Quick Start
