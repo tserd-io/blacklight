@@ -76,3 +76,44 @@ jobs:
         run: blacklight health
       - name: Smoke packaged agent data
         run: python -c "from blacklight.agents import AgentRegistry; assert AgentRegistry().get('ticket_classifier_agent').agent_id == 'ticket_classifier_agent'"
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: blacklight-ci
+      CONTAINER_NAME: blacklight-ci-smoke
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t "$IMAGE_NAME" platform
+      - name: Run Docker container in mock mode
+        run: |
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            -p 8000:8000 \
+            -e LLM_PROVIDER=mock \
+            -e LLM_MODEL=mock-ticket-classifier \
+            -e OLLAMA_BASE_URL=https://example.com \
+            "$IMAGE_NAME"
+      - name: Smoke API health endpoint
+        run: |
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$CONTAINER_NAME"
+          exit 1
+      - name: Smoke classify endpoint
+        run: |
+          curl --fail --silent \
+            -X POST http://127.0.0.1:8000/classify-ticket \
+            -H "Content-Type: application/json" \
+            -d '{"subject":"Refund request","body":"Customer asks for a refund after duplicate billing."}'
+      - name: Show Docker logs
+        if: always()
+        run: docker logs "$CONTAINER_NAME" || true
+      - name: Stop Docker container
+        if: always()
+        run: docker rm -f "$CONTAINER_NAME" || true
