@@ -463,6 +463,42 @@ def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
     assert trace_show_payload["trace"]["domain_to_range"]["eval_evidence"]["linked"] is False
 
 
+def test_agents_demo_command_runs_deterministic_mock_agent(
+    capsys,
+    monkeypatch,
+    tmp_path,
+):
+    trace_db_path = tmp_path / "agent-demo.sqlite3"
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    exit_code = main(
+        [
+            "agents",
+            "demo",
+            "ticket_classifier_agent",
+            "--trace-db-path",
+            str(trace_db_path),
+            "--session-id",
+            "console-agent-demo",
+            "--json",
+            "--verbose",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    traces = TraceStore(trace_db_path).list_by_session_id("console-agent-demo")
+    envelope = AgentRunStore(trace_db_path).get(payload["agent_run"]["run_id"])
+
+    assert exit_code == 0
+    assert payload["agent_run"]["agent_id"] == "ticket_classifier_agent"
+    assert payload["agent_run"]["session_id"] == "console-agent-demo"
+    assert payload["output_summary"]["category"] == "billing"
+    assert traces[0]["provider"] == "mock"
+    assert traces[0]["model"] == "mock-ticket-classifier"
+    assert envelope is not None
+    assert envelope["provider_call"]["provider"] == "mock"
+
+
 def test_agents_run_verbose_command_prints_traceable_summary(capsys, tmp_path):
     trace_db_path = tmp_path / "agent-run.sqlite3"
 

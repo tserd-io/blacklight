@@ -440,7 +440,8 @@ def test_console_dashboard_exposes_demo_and_recent_inspection_links(monkeypatch,
 
     assert response.status_code == 200
     assert "Blacklight Studio" in response.text
-    assert "Run Demo" in response.text
+    assert "Run Agent" in response.text
+    assert "/console/agents/ticket_classifier_agent/run" in response.text
     assert "/console/workflows" in response.text
     assert "/console/traces" in response.text
     assert "/console/evals" in response.text
@@ -456,7 +457,7 @@ def test_console_surfaces_render_navigation_and_cli_equivalents(monkeypatch, tmp
     client = TestClient(api.app)
     expected = {
         "/console/first-run": "First Run",
-        "/console/workflows": "blacklight classify",
+        "/console/workflows": "blacklight agents demo",
         "/console/agents": "blacklight agents list",
         "/console/runs": "blacklight session show",
         "/console/traces": "blacklight trace list",
@@ -500,9 +501,13 @@ def test_console_agent_profile_shows_domain_range_trace_links_and_cli():
     assert "/console/traces" in response.text
     assert "/console/review" in response.text
     assert "/console/workflows" in response.text
-    assert "/console/run-demo" in response.text
+    assert "/console/agents/ticket_classifier_agent/run" in response.text
+    assert "Seeded Run Inputs" in response.text
+    assert "Copy" in response.text
+    assert "CLI Equivalent" in response.text
     assert "blacklight agents show ticket_classifier_agent" in response.text
     assert "blacklight agents show ticket_classifier_agent --json" in response.text
+    assert "blacklight agents demo ticket_classifier_agent" in response.text
     assert "blacklight prompts show ticket_classifier" in response.text
 
 
@@ -510,15 +515,78 @@ def test_console_run_demo_links_result_to_trace_and_session(monkeypatch, tmp_pat
     trace_store, _eval_store, _review_store = _patch_seeded_console_stores(monkeypatch, tmp_path)
 
     response = TestClient(api.app).post("/console/run-demo")
-    traces = trace_store.list_by_session_id("console-demo", limit=10)
+    traces = trace_store.list_by_session_id("console-agent-demo", limit=10)
 
     assert response.status_code == 200
-    assert "Demo Result" in response.text
+    assert "Agent Run Result" in response.text
     assert "billing" in response.text
-    assert "/sessions/console-demo" in response.text
+    assert "/sessions/console-agent-demo" in response.text
     assert "blacklight trace show" in response.text
     assert len(traces) == 1
-    assert traces[0]["session_id"] == "console-demo"
+    assert traces[0]["session_id"] == "console-agent-demo"
+    assert traces[0]["agent_run_id"]
+
+
+def test_console_agent_run_journey_shows_clickable_trace_and_copyable_cli(monkeypatch, tmp_path):
+    trace_store, _eval_store, _review_store = _patch_seeded_console_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).post("/console/agents/ticket_classifier_agent/run")
+    traces = trace_store.list_by_session_id("console-agent-demo", limit=10)
+    trace = traces[-1]
+
+    assert response.status_code == 200
+    assert "Agent Run Result" in response.text
+    assert "Seeded Inputs" in response.text
+    assert "Output Summary" in response.text
+    assert "Trace Path" in response.text
+    assert "Domain Inputs" in response.text
+    assert "Guardrails" in response.text
+    assert "Review/Eval" in response.text
+    assert "accepted" in response.text
+    assert f"/api/console/traces/{trace['request_id']}" in response.text
+    assert "copy-command" in response.text
+    assert "navigator.clipboard.writeText" in response.text
+    assert 'onclick="this.select()"' in response.text
+    assert 'onfocus="this.select()"' in response.text
+    assert "blacklight agents demo ticket_classifier_agent" in response.text
+
+
+def test_console_agent_run_uses_mock_demo_even_when_live_provider_is_unconfigured(
+    monkeypatch,
+    tmp_path,
+):
+    trace_store, _eval_store, _review_store = _patch_seeded_console_stores(monkeypatch, tmp_path)
+    trace_db_path = api.settings.trace_db_path
+    monkeypatch.setattr(
+        api,
+        "settings",
+        replace(
+            api.settings,
+            provider="openai",
+            openai_api_key=None,
+            trace_db_path=trace_db_path,
+        ),
+    )
+
+    response = TestClient(api.app).post("/console/agents/ticket_classifier_agent/run")
+    traces = trace_store.list_by_session_id("console-agent-demo", limit=10)
+
+    assert response.status_code == 200
+    assert "Agent Run Result" in response.text
+    assert "billing" in response.text
+    assert traces[-1]["provider"] == "mock"
+    assert traces[-1]["model"] == "mock-ticket-classifier"
+
+
+def test_console_agent_run_error_state_explains_known_error():
+    response = TestClient(api.app).post("/console/agents/missing_agent/run")
+
+    assert response.status_code == 404
+    assert "Agent Run Could Not Start" in response.text
+    assert "agent_not_found" in response.text
+    assert "Agent not found: missing_agent" in response.text
+    assert "blacklight agents list" in response.text
+    assert "blacklight agents demo missing_agent" in response.text
 
 
 def test_console_api_dashboard_returns_first_run_state(monkeypatch, tmp_path):

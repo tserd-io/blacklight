@@ -45,6 +45,7 @@ from blacklight.settings import load_settings
 DEMO_SUBJECT = "Refund request"
 DEMO_BODY = "Customer asks for a refund after duplicate billing."
 DEMO_SESSION_ID = "demo"
+DEMO_AGENT_SESSION_ID = "console-agent-demo"
 DEMO_MODEL = "mock-ticket-classifier"
 
 
@@ -577,22 +578,26 @@ def _format_agent_run_summary(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def agents_run(args: argparse.Namespace) -> int:
-    agent = _get_agent_or_print_error(args.agent_id)
-    if agent is None:
-        return 1
-    _assert_ticket_classifier_agent(agent)
-
-    settings = load_settings()
-    db_path = args.trace_db_path or settings.trace_db_path
+def _run_agent(
+    *,
+    agent: AgentDefinition,
+    subject: str,
+    body: str,
+    requested_session_id: str | None,
+    db_path: str,
+    provider: Any,
+    model: str,
+    json_output: bool,
+    verbose: bool,
+) -> int:
     run_id = f"agent-run-{uuid.uuid4()}"
-    requested_session_id = args.session_id
     session_id = requested_session_id or run_id
     trace_store = TraceStore(db_path)
     agent_run_store = AgentRunStore(db_path)
+    settings = load_settings()
     classifier = TicketClassifier(
-        provider=create_provider(settings),
-        model=settings.model,
+        provider=provider,
+        model=model,
         trace_store=trace_store,
         idempotency_store=IdempotencyStore(db_path),
         provider_timeout_seconds=settings.provider_timeout_seconds,
@@ -601,8 +606,8 @@ def agents_run(args: argparse.Namespace) -> int:
         provider_rate_limit_window_seconds=settings.provider_rate_limit_window_seconds,
     )
     ticket = TicketRequest(
-        subject=args.subject,
-        body=args.body,
+        subject=subject,
+        body=body,
         session_id=session_id,
         idempotency_key=run_id,
         agent_run_id=run_id,
@@ -622,21 +627,21 @@ def agents_run(args: argparse.Namespace) -> int:
             db_path=db_path,
             result=None,
             trace=trace,
-            verbose=args.verbose,
+            verbose=verbose,
             validation_errors=[str(exc)],
         )
         envelope = build_agent_run_envelope(
             agent=agent,
             run_id=run_id,
             session_id=session_id,
-            subject=args.subject,
-            body=args.body,
+            subject=subject,
+            body=body,
             trace=trace,
             payload=payload,
         )
         agent_run_store.insert(envelope)
         payload["trace_envelope"] = envelope
-        if args.json_output:
+        if json_output:
             _print_json(payload, file=sys.stderr)
         else:
             _print_text_error(_format_agent_run_summary(payload))
@@ -651,24 +656,65 @@ def agents_run(args: argparse.Namespace) -> int:
         db_path=db_path,
         result=result,
         trace=trace,
-        verbose=args.verbose,
+        verbose=verbose,
     )
     envelope = build_agent_run_envelope(
         agent=agent,
         run_id=run_id,
         session_id=session_id,
-        subject=args.subject,
-        body=args.body,
+        subject=subject,
+        body=body,
         trace=trace,
         payload=payload,
     )
     agent_run_store.insert(envelope)
     payload["trace_envelope"] = envelope
-    if args.json_output:
+    if json_output:
         _print_json(payload)
         return 0
     _print_text(_format_agent_run_summary(payload))
     return 0
+
+
+def agents_run(args: argparse.Namespace) -> int:
+    agent = _get_agent_or_print_error(args.agent_id)
+    if agent is None:
+        return 1
+    _assert_ticket_classifier_agent(agent)
+
+    settings = load_settings()
+    db_path = args.trace_db_path or settings.trace_db_path
+    return _run_agent(
+        agent=agent,
+        subject=args.subject,
+        body=args.body,
+        requested_session_id=args.session_id,
+        db_path=db_path,
+        provider=create_provider(settings),
+        model=settings.model,
+        json_output=args.json_output,
+        verbose=args.verbose,
+    )
+
+
+def agents_demo(args: argparse.Namespace) -> int:
+    agent = _get_agent_or_print_error(args.agent_id)
+    if agent is None:
+        return 1
+    _assert_ticket_classifier_agent(agent)
+
+    settings = load_settings()
+    return _run_agent(
+        agent=agent,
+        subject=DEMO_SUBJECT,
+        body=DEMO_BODY,
+        requested_session_id=args.session_id,
+        db_path=args.trace_db_path or settings.trace_db_path,
+        provider=MockProvider(),
+        model=DEMO_MODEL,
+        json_output=args.json_output,
+        verbose=args.verbose,
+    )
 
 
 def agents_runs_list(args: argparse.Namespace) -> int:
@@ -987,6 +1033,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print stable structured JSON.",
     )
     agents_show_parser.set_defaults(func=agents_show)
+    agents_demo_parser = agents_subparsers.add_parser(
+        "demo",
+        help="Run a deterministic mock-mode managed-agent demo.",
+    )
+    agents_demo_parser.add_argument("agent_id", help="Agent id to run in mock demo mode.")
+    agents_demo_parser.add_argument(
+        "--session-id",
+        default=DEMO_AGENT_SESSION_ID,
+        help="Session id used for the deterministic demo trace.",
+    )
+    agents_demo_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    agents_demo_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Print stable structured JSON.",
+    )
+    agents_demo_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Include domain-to-range evidence and full trace detail.",
+    )
+    agents_demo_parser.set_defaults(func=agents_demo)
     agents_run_parser = agents_subparsers.add_parser(
         "run",
         help="Run a managed agent through its backed workflow.",

@@ -103,6 +103,12 @@ class AgentRunRequest(BaseModel):
     verbose: bool = False
 
 
+DEMO_AGENT_ID = "ticket_classifier_agent"
+DEMO_AGENT_SUBJECT = "Refund request"
+DEMO_AGENT_BODY = "Customer asks for a refund after duplicate billing."
+DEMO_AGENT_SESSION_ID = "console-agent-demo"
+
+
 class ConsoleEvalRunRequest(BaseModel):
     session_id: str = "console-api-eval"
     prompt_version: int | None = None
@@ -282,6 +288,9 @@ def _console_shell(*, active: str, title: str, body: str) -> HTMLResponse:
     .toolbar {{ display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }}
     button, .button {{ border: 1px solid #243447; border-radius: 6px; background: #243447; color: #fff; padding: 8px 11px; text-decoration: none; cursor: pointer; }}
     .button.secondary {{ background: #fff; color: #243447; }}
+    .copy-row {{ display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }}
+    .copy-command, input.sample, textarea.sample {{ width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; font: 13px Consolas, monospace; color: #1f2933; background: #fff; }}
+    textarea.sample {{ min-height: 76px; resize: vertical; }}
     table {{ width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #d8dee8; margin-top: 12px; }}
     th, td {{ border-bottom: 1px solid #e2e8f0; padding: 10px; text-align: left; vertical-align: top; font-size: 14px; }}
     th {{ background: #edf2f7; font-size: 12px; text-transform: uppercase; color: #526071; }}
@@ -320,6 +329,18 @@ def _console_shell(*, active: str, title: str, body: str) -> HTMLResponse:
 
 def _console_command_panel(command: str) -> str:
     return f'<div class="panel"><h2>CLI Equivalent</h2><p>{_cli_command(command)}</p></div>'
+
+
+def _copyable_command_panel(command: str) -> str:
+    escaped_command = escape(command, quote=True)
+    return f"""
+<div class="panel">
+  <h2>CLI Equivalent</h2>
+  <div class="copy-row">
+    <input class="copy-command" value="{escaped_command}" readonly aria-label="CLI equivalent" onclick="this.select()" onfocus="this.select()">
+    <button type="button" onclick="navigator.clipboard.writeText(this.previousElementSibling.value)">Copy</button>
+  </div>
+</div>"""
 
 
 def _trace_db_arg() -> str:
@@ -480,6 +501,13 @@ def _agent_run_cli_commands(
     }
 
 
+def _console_agent_demo_cli_command(agent_id: str = DEMO_AGENT_ID) -> str:
+    return (
+        f"blacklight agents demo {agent_id} "
+        f"--session-id {DEMO_AGENT_SESSION_ID} {_trace_db_arg()} --json --verbose"
+    )
+
+
 def _agent_run_response_payload(
     *,
     payload: dict[str, Any],
@@ -522,18 +550,24 @@ def _run_managed_agent(
     *,
     agent: AgentDefinition,
     run_request: AgentRunRequest,
+    provider_override: Any | None = None,
+    model_override: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     _assert_runnable_agent(agent)
     run_id = f"agent-run-{uuid.uuid4()}"
     requested_session_id = run_request.session_id
     session_id = requested_session_id or run_id
-    try:
-        provider = create_provider(settings)
-    except RuntimeError as exc:
-        raise ProviderConfigurationError(str(exc)) from exc
+    if provider_override is None:
+        try:
+            provider = create_provider(settings)
+        except RuntimeError as exc:
+            raise ProviderConfigurationError(str(exc)) from exc
+    else:
+        provider = provider_override
+    model = model_override or settings.model
     run_classifier = TicketClassifier(
         provider=provider,
-        model=settings.model,
+        model=model,
         trace_store=trace_store,
         idempotency_store=idempotency_store,
         provider_timeout_seconds=settings.provider_timeout_seconds,
@@ -1133,7 +1167,7 @@ def _render_console_dashboard() -> HTMLResponse:
 <h1>Dashboard</h1>
 <p class="muted">Local console for workflow runs, traces, evals, prompts, providers, and review.</p>
 <div class="toolbar">
-  <form method="post" action="/console/run-demo"><button type="submit">Run Demo</button></form>
+  <form method="post" action="/console/agents/{DEMO_AGENT_ID}/run"><button type="submit">Run Agent</button></form>
   <a class="button secondary" href="/console/traces">Recent Traces</a>
   <a class="button secondary" href="/console/evals">Recent Evals</a>
   <a class="button secondary" href="/reviews">Review Queue</a>
@@ -1237,51 +1271,150 @@ def _console_eval_row(run: dict[str, Any]) -> str:
 
 
 def _run_console_demo() -> dict[str, Any]:
-    demo_classifier = TicketClassifier(
-        provider=MockProvider(),
-        model=settings.model,
-        trace_store=trace_store,
-        idempotency_store=idempotency_store,
-        provider_timeout_seconds=settings.provider_timeout_seconds,
-        provider_max_retries=settings.provider_max_retries,
-        provider_rate_limit_requests=settings.provider_rate_limit_requests,
-        provider_rate_limit_window_seconds=settings.provider_rate_limit_window_seconds,
+    return _run_console_agent(DEMO_AGENT_ID)
+
+
+def _run_console_agent(agent_id: str) -> dict[str, Any]:
+    agent = _get_agent_or_404(agent_id)
+    payload, status_code = _run_managed_agent(
+        agent=agent,
+        run_request=AgentRunRequest(
+            subject=DEMO_AGENT_SUBJECT,
+            body=DEMO_AGENT_BODY,
+            session_id=DEMO_AGENT_SESSION_ID,
+            verbose=True,
+        ),
+        provider_override=MockProvider(),
+        model_override="mock-ticket-classifier",
     )
-    result = demo_classifier.classify(
-        TicketRequest(
-            subject="Refund request",
-            body="Customer asks for a refund after duplicate billing.",
-            session_id="console-demo",
-            idempotency_key=f"console-demo-{uuid.uuid4()}",
-        )
-    )
-    trace = trace_store.list_by_session_id("console-demo", limit=500)[-1]
-    return {"result": result.model_dump(mode="json"), "trace": trace}
+    payload["http_status_code"] = status_code
+    demo_command = _console_agent_demo_cli_command(agent_id)
+    payload["cli_command"] = demo_command
+    payload["cli_commands"]["primary"] = demo_command
+    payload["cli_commands"]["run"] = demo_command
+    payload["cli"]["primary"] = demo_command
+    payload["cli"]["run"] = demo_command
+    return payload
 
 
 def _render_console_demo_result(payload: dict[str, Any]) -> HTMLResponse:
-    trace = payload["trace"]
-    result = payload["result"]
-    session_id = escape(trace["session_id"])
-    request_id = escape(trace["request_id"])
+    return _render_console_agent_run_result(payload)
+
+
+def _render_console_agent_run_error(agent_id: str, exc: Exception) -> HTMLResponse:
+    detail = _console_error_detail(exc)
+    status_code = _console_error_status(exc)
+    retry_command = _console_agent_demo_cli_command(agent_id)
     body = f"""
-<h1>Demo Result</h1>
-<p class="muted">ticket_classifier / mock provider</p>
+<h1>Agent Run Could Not Start</h1>
+<p class="muted">The console used the managed-agent run path, but the provider or configuration blocked the run.</p>
 <section class="grid">
-  <div class="panel"><h2>Category</h2><div class="metric">{escape(result["category"])}</div></div>
-  <div class="panel"><h2>Severity</h2><div class="metric">{escape(result["severity"])}</div></div>
-  <div class="panel"><h2>Review</h2><div class="metric">{escape(str(result["needs_review"]))}</div></div>
+  <div class="panel"><h2>Error</h2><p><span class="status failed">{escape(detail["category"])}</span></p><p>{escape(detail["message"])}</p></div>
+  <div class="panel"><h2>Likely Cause</h2><p>{escape(detail["likely_cause"])}</p></div>
+  <div class="panel"><h2>Next Step</h2><p>{escape(detail["next_step"])}</p></div>
+  {_copyable_command_panel(retry_command)}
+</section>"""
+    response = _console_shell(active="agents", title="Agent Run Error", body=body)
+    response.status_code = status_code
+    return response
+
+
+def _console_error_detail(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, HTTPException) and isinstance(exc.detail, dict):
+        if {"category", "message", "likely_cause", "next_step"} <= set(exc.detail):
+            return exc.detail
+    return describe_exception(exc).as_payload()["error"]
+
+
+def _console_error_status(exc: Exception) -> int:
+    if isinstance(exc, HTTPException):
+        return exc.status_code
+    if isinstance(exc, ProviderConfigurationError):
+        return 500
+    if isinstance(exc, ProviderCallError):
+        return 503
+    if isinstance(exc, IdempotencyInProgressError):
+        return 409
+    if isinstance(exc, GuardrailValidationError):
+        return 422
+    return 500
+
+
+def _render_console_agent_run_result(payload: dict[str, Any]) -> HTMLResponse:
+    run = payload["agent_run"]
+    validation = payload["validation"]
+    summary = payload["output_summary"] or {}
+    trace = payload["trace"]
+    envelope = payload["trace_envelope"]
+    agent_id = escape(run["agent_id"])
+    run_id = escape(run["run_id"])
+    session_id = escape(run["session_id"])
+    trace_id = escape(payload["trace_id"])
+    review_state = escape(validation["review_state"])
+    guardrail = escape(validation["guardrail_outcome"])
+    cli_command = payload["cli_command"]
+    eval_link = ""
+    eval_evidence = envelope.get("eval_evidence", {})
+    if eval_evidence.get("linked"):
+        eval_run_id = escape(str(eval_evidence["eval_run_id"]))
+        eval_link = f'<a href="/api/console/evals/{eval_run_id}">{eval_run_id}</a>'
+    else:
+        eval_link = "No eval linked to this ad hoc console run."
+    output_rows = ""
+    if summary:
+        output_rows = f"""
+      <tr><td data-label="Field">Category</td><td data-label="Value">{escape(str(summary["category"]))}</td></tr>
+      <tr><td data-label="Field">Severity</td><td data-label="Value">{escape(str(summary["severity"]))}</td></tr>
+      <tr><td data-label="Field">Confidence</td><td data-label="Value">{escape(str(summary["confidence"]))}</td></tr>
+      <tr><td data-label="Field">Needs Review</td><td data-label="Value">{escape(str(summary["needs_review"]))}</td></tr>
+      <tr><td data-label="Field">Rationale</td><td data-label="Value">{escape(str(summary["rationale"]))}</td></tr>"""
+    else:
+        output_rows = '<tr><td colspan="2" class="empty">No range output was accepted for this run.</td></tr>'
+    domain_steps = [
+        ("Domain Inputs", "Seeded support-ticket subject and body"),
+        ("Context", "Subject, body, and session ID bundled without persisting raw inputs"),
+        ("Provider", f"{trace['record']['provider']} / {trace['record']['model']}" if "record" in trace else "Provider trace recorded"),
+        ("Validation", f"passed={validation['passed']}"),
+        ("Guardrails", validation["guardrail_outcome"]),
+        ("Range Output", "TicketClassification"),
+        ("Review/Eval", validation["review_state"]),
+    ]
+    step_rows = "\n".join(
+        f'<tr><td data-label="Step">{escape(label)}</td><td data-label="Evidence">{escape(str(value))}</td></tr>'
+        for label, value in domain_steps
+    )
+    body = f"""
+<h1>Agent Run Result</h1>
+<p class="muted">Managed run for <code>{agent_id}</code> using seeded sample inputs.</p>
+<section class="grid">
+  <div class="panel"><h2>Run</h2><p><code>{run_id}</code></p><p><span class="status {escape(run["run_status"])}">{escape(_label(run["run_status"]))}</span></p></div>
+  <div class="panel"><h2>Trace ID</h2><p><a href="/api/console/traces/{trace_id}"><code>{trace_id}</code></a></p></div>
+  <div class="panel"><h2>Guardrail</h2><p><span class="status {guardrail}">{escape(_label(guardrail))}</span></p></div>
+  <div class="panel"><h2>Review</h2><p><span class="status {review_state}">{escape(_label(review_state))}</span></p></div>
 </section>
 <div class="toolbar">
-  <a class="button" href="/sessions/{session_id}">Open Session</a>
-  <a class="button secondary" href="/console/traces">Open Traces</a>
+  <a class="button" href="/api/console/traces/{trace_id}">Open Trace</a>
+  <a class="button secondary" href="/api/agent-runs/{run_id}">Open Run JSON</a>
+  <a class="button secondary" href="/sessions/{session_id}">Open Session</a>
+  <a class="button secondary" href="/console/review">Review Queue</a>
 </div>
 <section class="grid">
-  <div class="panel"><h2>Trace</h2><p><code>{request_id}</code></p></div>
-  {_console_command_panel("blacklight demo --verbose")}
-  {_console_command_panel(f"blacklight trace show {trace['request_id']} --trace-db-path {settings.trace_db_path}")}
-</section>"""
-    return _console_shell(active="workflows", title="Demo Result", body=body)
+  <div class="panel">
+    <h2>Seeded Inputs</h2>
+    <label>Subject<input class="sample" value="{escape(DEMO_AGENT_SUBJECT, quote=True)}" readonly></label>
+    <label>Body<textarea class="sample" readonly>{escape(DEMO_AGENT_BODY)}</textarea></label>
+  </div>
+  <div class="panel"><h2>Output Summary</h2><table><tbody>{output_rows}</tbody></table></div>
+  <div class="panel"><h2>Eval Evidence</h2><p>{eval_link}</p></div>
+  {_copyable_command_panel(cli_command)}
+  {_copyable_command_panel(payload["cli"]["trace"])}
+</section>
+<h2>Trace Path</h2>
+<table>
+  <thead><tr><th>Step</th><th>Evidence</th></tr></thead>
+  <tbody>{step_rows}</tbody>
+</table>"""
+    return _console_shell(active="agents", title="Agent Run Result", body=body)
 
 
 def _render_console_workflows() -> HTMLResponse:
@@ -1293,9 +1426,9 @@ def _render_console_workflows() -> HTMLResponse:
     <h2>ticket_classifier</h2>
     <p>Provider: {escape(settings.provider)}</p>
     <p>Model: {escape(settings.model)}</p>
-    <div class="toolbar"><form method="post" action="/console/run-demo"><button type="submit">Run Demo</button></form></div>
+    <div class="toolbar"><form method="post" action="/console/agents/{DEMO_AGENT_ID}/run"><button type="submit">Run Agent</button></form></div>
   </div>
-  {_console_command_panel('blacklight classify --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --session-id demo')}
+  {_console_command_panel(_console_agent_demo_cli_command())}
 </section>"""
     return _console_shell(active="workflows", title="Workflows", body=body)
 
@@ -1355,18 +1488,25 @@ def _render_console_agent_profile(agent_id: str) -> HTMLResponse:
 <h1>{escape(agent.display_name)}</h1>
 <p class="muted">{escape(agent.description)}</p>
 <div class="toolbar">
-  <a class="button" href="/console/workflows">Demo Run</a>
+  <form method="post" action="/console/agents/{quote(agent.agent_id, safe='')}/run"><button type="submit">Run Agent</button></form>
   <a class="button secondary" href="/console/prompts">Prompt</a>
   <a class="button secondary" href="/console/evals">Evals</a>
   <a class="button secondary" href="/console/traces">Traces</a>
   <a class="button secondary" href="/console/review">Review Queue</a>
-  <form method="post" action="/console/run-demo"><button type="submit">Run Demo</button></form>
 </div>
 <section class="grid">
   <div class="panel"><h2>Agent</h2><p><code>{escape(agent.agent_id)}</code></p><p>Version {agent.version}</p></div>
   <div class="panel"><h2>Workflow</h2><p><code>{escape(agent.workflow_id)}</code></p><p><a href="/console/workflows">Open workflow</a></p></div>
   <div class="panel"><h2>Prompt</h2><p><code>{escape(prompt_id)}</code> v{escape(prompt_versions)}</p><p><a href="/console/prompts">Open prompt registry</a></p></div>
   <div class="panel"><h2>Output Schema</h2><p><code>{escape(agent.governed_range.output_schema)}</code></p></div>
+</section>
+<section class="grid">
+  <div class="panel">
+    <h2>Seeded Run Inputs</h2>
+    <label>Subject<input class="sample" value="{escape(DEMO_AGENT_SUBJECT, quote=True)}" readonly></label>
+    <label>Body<textarea class="sample" readonly>{escape(DEMO_AGENT_BODY)}</textarea></label>
+  </div>
+  {_copyable_command_panel(_console_agent_demo_cli_command(agent.agent_id))}
 </section>
 <section class="grid">
   <div class="panel">
@@ -1896,7 +2036,10 @@ def console_first_run() -> HTMLResponse:
 
 @app.post("/console/run-demo", response_class=HTMLResponse)
 def console_run_demo() -> HTMLResponse:
-    return _render_console_demo_result(_run_console_demo())
+    try:
+        return _render_console_demo_result(_run_console_demo())
+    except Exception as exc:
+        return _render_console_agent_run_error(DEMO_AGENT_ID, exc)
 
 
 @app.get("/console/workflows", response_class=HTMLResponse)
@@ -1912,6 +2055,14 @@ def console_agents() -> HTMLResponse:
 @app.get("/console/agents/{agent_id}", response_class=HTMLResponse)
 def console_agent_profile(agent_id: str) -> HTMLResponse:
     return _render_console_agent_profile(agent_id)
+
+
+@app.post("/console/agents/{agent_id}/run", response_class=HTMLResponse)
+def console_agent_run(agent_id: str) -> HTMLResponse:
+    try:
+        return _render_console_agent_run_result(_run_console_agent(agent_id))
+    except Exception as exc:
+        return _render_console_agent_run_error(agent_id, exc)
 
 
 @app.get("/console/runs", response_class=HTMLResponse)
