@@ -8,9 +8,10 @@ from blacklight import api
 from blacklight.cli import build_parser
 from blacklight.demo_seed import seed_demo_data
 from blacklight.errors import GuardrailValidationError
-from blacklight.models import GuardrailOutcome, TraceRecord
+from blacklight.models import GuardrailOutcome, ProviderResponse, TraceRecord
 from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.evaluations import EvalMetricStore
+from blacklight.observability.idempotency import IdempotencyStore
 from blacklight.observability.reviews import ReviewDecisionStore
 from blacklight.observability.storage import TraceStore
 from blacklight.providers.factory import ProviderConfigurationError
@@ -70,6 +71,19 @@ class StaticLocalModelStatus:
                 "support": "A managed app should show model status.",
             },
         }
+
+
+class InvalidJsonProvider:
+    name = "invalid-json"
+
+    def complete(self, request):
+        return ProviderResponse(
+            text="not-json",
+            provider=self.name,
+            model=request.model,
+            input_tokens=1,
+            output_tokens=1,
+        )
 
 
 def _assert_cli_command_parseable(command: str) -> None:
@@ -183,6 +197,27 @@ def _patch_seeded_console_stores(monkeypatch, tmp_path):
     return trace_store, eval_store, review_store
 
 
+def _patch_agent_run_stores(monkeypatch, tmp_path):
+    db_path = tmp_path / "agent-runs-api.sqlite3"
+    trace_store = TraceStore(db_path)
+    idempotency_store = IdempotencyStore(db_path)
+    agent_run_store = AgentRunStore(db_path)
+    monkeypatch.setattr(api, "trace_store", trace_store)
+    monkeypatch.setattr(api, "idempotency_store", idempotency_store)
+    monkeypatch.setattr(api, "agent_run_store", agent_run_store)
+    monkeypatch.setattr(
+        api,
+        "settings",
+        replace(
+            api.settings,
+            provider="mock",
+            model="mock-ticket-classifier",
+            trace_db_path=str(db_path),
+        ),
+    )
+    return trace_store, agent_run_store
+
+
 def test_metrics_endpoint_returns_expanded_trace_metrics(tmp_path):
     original_trace_store = api.trace_store
     store = TraceStore(tmp_path / "traces.sqlite3")
@@ -280,6 +315,122 @@ def test_agent_profile_endpoint_returns_known_error_for_missing_agent():
     assert payload["detail"]["next_step"] == (
         "Run `blacklight agents list` and retry with a listed agent_id."
     )
+
+
+def test_agent_run_api_runs_ticket_classifier_and_persists_envelope(monkeypatch, tmp_path):
+    trace_store, agent_run_store = _patch_agent_run_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).post(
+        "/api/agents/ticket_classifier_agent/runs",
+        json={
+            "subject": "Refund request",
+            "body": "Customer asks for a refund after duplicate billing.",
+            "session_id": "api-agent-session",
+        },
+    )
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["agent_run"]["agent_id"] == "ticket_classifier_agent"
+    assert payload["agent_run"]["session_id"] == "api-agent-session"
+    assert payload["agent_run"]["run_status"] == "completed"
+    assert payload["run_id"].startswith("agent-run-")
+    assert payload["trace_id"]
+    assert payload["output_summary"]["category"] == "billing"
+    assert payload["validation"]["guardrail_outcome"] == "accepted"
+    assert payload["links"]["self"] == f"/api/agent-runs/{payload['run_id']}"
+    assert "blacklight agents run ticket_classifier_agent" in payload["cli_command"]
+    assert "blacklight agents runs show" in payload["cli"]["show"]
+    _assert_cli_command_parseable(payload["cli_command"])
+    _assert_cli_command_parseable(payload["cli"]["show"])
+
+    traces = trace_store.list_by_agent_run_id(payload["run_id"])
+    envelope = agent_run_store.get(payload["run_id"])
+    assert len(traces) == 1
+    assert traces[0]["request_id"] == payload["trace_id"]
+    assert traces[0]["session_id"] == "api-agent-session"
+    assert traces[0]["agent_run_id"] == payload["run_id"]
+    assert envelope is not None
+    assert envelope["trace_request_id"] == payload["trace_id"]
+    assert envelope["context_bundle"]["raw_inputs_persisted"] is False
+
+    lookup_response = TestClient(api.app).get(f"/api/agent-runs/{payload['run_id']}")
+    assert lookup_response.status_code == 200
+    assert lookup_response.json()["agent_run"]["agent_run_id"] == payload["run_id"]
+
+
+def test_agent_run_api_returns_unknown_agent_error():
+    response = TestClient(api.app).post(
+        "/api/agents/missing_agent/runs",
+        json={"subject": "Refund request", "body": "Duplicate billing."},
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 404
+    assert payload["detail"]["category"] == "agent_not_found"
+
+
+def test_agent_run_api_rejects_invalid_input():
+    response = TestClient(api.app).post(
+        "/api/agents/ticket_classifier_agent/runs",
+        json={"subject": "Refund request"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_agent_run_api_returns_review_routed_output(monkeypatch, tmp_path):
+    _trace_store, agent_run_store = _patch_agent_run_stores(monkeypatch, tmp_path)
+
+    response = TestClient(api.app).post(
+        "/api/agents/ticket_classifier_agent/runs",
+        json={
+            "subject": "Possible fraud",
+            "body": "Customer reports possible fraud on a billing account.",
+            "session_id": "api-agent-review",
+        },
+    )
+    payload = response.json()
+    envelope = agent_run_store.get(payload["run_id"])
+
+    assert response.status_code == 200
+    assert payload["agent_run"]["run_status"] == "completed"
+    assert payload["validation"]["guardrail_outcome"] == "needs_review"
+    assert payload["validation"]["review_state"] == "needs_review"
+    assert payload["validation"]["review_required"] is True
+    assert payload["output_summary"]["needs_review"] is True
+    assert envelope["review"]["state"] == "needs_review"
+    assert envelope["review"]["touch_decision"] == "block_downstream_touch"
+
+
+def test_agent_run_api_persists_failed_validation_payload(monkeypatch, tmp_path):
+    trace_store, agent_run_store = _patch_agent_run_stores(monkeypatch, tmp_path)
+    monkeypatch.setattr(api, "create_provider", lambda _settings: InvalidJsonProvider())
+
+    response = TestClient(api.app).post(
+        "/api/agents/ticket_classifier_agent/runs",
+        json={
+            "subject": "Refund request",
+            "body": "Customer asks for a refund after duplicate billing.",
+            "session_id": "api-agent-validation-failure",
+        },
+    )
+    payload = response.json()
+
+    assert response.status_code == 422
+    assert payload["agent_run"]["run_status"] == "failed"
+    assert payload["validation"]["guardrail_outcome"] == "rejected"
+    assert payload["validation"]["review_state"] == "rejected"
+    assert payload["validation"]["errors"]
+    assert payload["output_summary"] is None
+    assert payload["error"]["category"] == "validation_error"
+    assert payload["links"]["trace"] == f"/api/console/traces/{payload['trace_id']}"
+    assert trace_store.list_by_agent_run_id(payload["run_id"])
+    envelope = agent_run_store.get(payload["run_id"])
+    assert envelope is not None
+    assert envelope["run_status"] == "failed"
+    assert envelope["guardrail"]["outcome"] == "rejected"
 
 
 def test_console_dashboard_exposes_demo_and_recent_inspection_links(monkeypatch, tmp_path):
