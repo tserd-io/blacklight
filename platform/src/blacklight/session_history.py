@@ -26,6 +26,40 @@ def trace_detail(trace: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def trace_domain_to_range_detail(
+    trace: dict[str, Any],
+    envelope: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    detail = trace_detail(trace)
+    if envelope is None:
+        return {
+            **detail,
+            "domain_to_range": None,
+        }
+    return {
+        **detail,
+        "domain_to_range": {
+            "agent_run": {
+                "agent_run_id": envelope["agent_run_id"],
+                "agent_id": envelope["agent_id"],
+                "agent_version": envelope["agent_version"],
+                "workflow_id": envelope["workflow_id"],
+                "run_status": envelope["run_status"],
+                "session_id": envelope["session_id"],
+                "trace_request_id": envelope["trace_request_id"],
+            },
+            "domain": envelope["domain_snapshot"],
+            "context": envelope["context_bundle"],
+            "provider": envelope["provider_call"],
+            "validation": envelope["validation"],
+            "guardrails": envelope["guardrail"],
+            "range": envelope["range_output"],
+            "review": envelope["review"],
+            "eval_evidence": envelope["eval_evidence"],
+        },
+    }
+
+
 def trace_status(trace: dict[str, Any]) -> str:
     if trace["error_category"] is not None:
         return "failed"

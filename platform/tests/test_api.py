@@ -478,6 +478,19 @@ def test_console_api_agent_run_envelope_lookup_links_trace(monkeypatch, tmp_path
         "/api/console/agent-runs/agent-run-1"
     )
     assert "blacklight agents runs show agent-run-1" in trace_response.json()["trace"]["cli"]["agent_run"]
+    assert trace_response.json()["trace"]["domain_to_range"]["agent_run"]["agent_run_id"] == (
+        "agent-run-1"
+    )
+    assert trace_response.json()["trace"]["domain_to_range"]["domain"]["prompt_ids"] == [
+        "ticket_classifier"
+    ]
+    assert trace_response.json()["trace"]["domain_to_range"]["context"]["raw_inputs_persisted"] is False
+    assert trace_response.json()["trace"]["domain_to_range"]["provider"]["provider"] == "mock"
+    assert trace_response.json()["trace"]["domain_to_range"]["validation"]["passed"] is True
+    assert trace_response.json()["trace"]["domain_to_range"]["guardrails"]["outcome"] == "accepted"
+    assert trace_response.json()["trace"]["domain_to_range"]["range"]["output"]["category"] == "billing"
+    assert trace_response.json()["trace"]["domain_to_range"]["review"]["state"] == "accepted"
+    assert trace_response.json()["trace"]["domain_to_range"]["eval_evidence"]["linked"] is False
 
 
 def test_console_api_surfaces_return_state_and_cli(monkeypatch, tmp_path):

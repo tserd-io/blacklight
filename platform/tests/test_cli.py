@@ -440,11 +440,27 @@ def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
         ["agents", "runs", "show", run_id, "--trace-db-path", str(trace_db_path)]
     )
     show_payload = json.loads(capsys.readouterr().out)
+    trace_show_exit_code = main(
+        ["traces", "show", payload["trace"]["trace_id"], "--trace-db-path", str(trace_db_path), "--json"]
+    )
+    trace_show_payload = json.loads(capsys.readouterr().out)
 
     assert list_exit_code == 0
     assert list_payload["agent_runs"][0]["agent_run_id"] == run_id
     assert show_exit_code == 0
     assert show_payload["agent_run"] == envelope
+    assert trace_show_exit_code == 0
+    assert trace_show_payload["trace"]["domain_to_range"]["agent_run"]["agent_run_id"] == run_id
+    assert trace_show_payload["trace"]["domain_to_range"]["domain"]["prompt_ids"] == [
+        "ticket_classifier"
+    ]
+    assert trace_show_payload["trace"]["domain_to_range"]["context"]["raw_inputs_persisted"] is False
+    assert trace_show_payload["trace"]["domain_to_range"]["provider"]["provider"] == "mock"
+    assert trace_show_payload["trace"]["domain_to_range"]["validation"]["passed"] is True
+    assert trace_show_payload["trace"]["domain_to_range"]["guardrails"]["outcome"] == "accepted"
+    assert trace_show_payload["trace"]["domain_to_range"]["range"]["output"]["category"] == "billing"
+    assert trace_show_payload["trace"]["domain_to_range"]["review"]["state"] == "accepted"
+    assert trace_show_payload["trace"]["domain_to_range"]["eval_evidence"]["linked"] is False
 
 
 def test_agents_run_verbose_command_prints_traceable_summary(capsys, tmp_path):
