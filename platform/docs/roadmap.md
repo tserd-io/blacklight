@@ -114,9 +114,10 @@ Milestone 8 final QA was run on July 9, 2026. The smoke path confirmed runnable 
 
 ## Next
 
-- Prepare the productization branch for pull-request review and approval
-- Decide whether the next release should stay CLI/package focused or include the web-first console and app-shell documentation
-- Add architecture screenshots or terminal examples to the README
+- Milestone 9: Formal Blacklight SDK
+- Make `blacklight.sdk` the stable Python embedding surface for workflows, traces, evals, providers, and managed agents
+- Preserve trace IDs, validation, guardrail/review outcomes, and domain/range metadata in SDK result models
+- Keep SDK examples mock-provider-first and public-safe
 
 ## Later
 
