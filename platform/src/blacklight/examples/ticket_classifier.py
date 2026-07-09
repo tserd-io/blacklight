@@ -12,6 +12,7 @@ from blacklight.models import (
     TicketClassification,
     TicketRequest,
     TraceRecord,
+    ticket_classification_output_schema,
 )
 from blacklight.observability.cost import estimate_cost
 from blacklight.observability.idempotency import (
@@ -88,6 +89,9 @@ class TicketClassifier:
             request = ProviderRequest(
                 prompt=prompt,
                 model=self.model,
+                output_format="json_object",
+                output_schema_name="ticket_classification",
+                output_schema=ticket_classification_output_schema(),
                 metadata={
                     "request_id": request_id,
                     "prompt_id": self.prompt_id,

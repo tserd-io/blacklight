@@ -98,6 +98,20 @@ Milestone 7 is complete as a managed-agent foundation pass. The project now supp
 
 Milestone 7 final QA was run on July 8, 2026. The smoke path confirmed managed-agent inspection works in mock mode with `openai_configured=false` and no live provider key.
 
+## Milestone 8 Completion
+
+Milestone 8 is complete as a managed-agent run and traceability pass. The project now supports:
+
+- runnable `ticket_classifier_agent` paths from CLI, API, and console using mock-mode defaults
+- durable agent-run IDs linked to trace rows without replacing user/session grouping IDs
+- domain-to-range trace envelopes covering domain inputs, context bundle, provider call, validation, guardrails, range output, review state, and eval evidence
+- accepted, rejected, and review-routed run outcomes with clear review reasons and routing decisions
+- eval evidence links from agent runs and traces to the relevant public-safe fixture suite, eval run, and eval case when available
+- console run results that expose trace IDs, run IDs, review state, equivalent CLI commands, and eval evidence
+- final QA checks for linting, tests, managed-agent CLI smoke, API smoke, console run smoke, trace inspection, docs accuracy, and no-live-key mock-provider behavior
+
+Milestone 8 final QA was run on July 9, 2026. The smoke path confirmed runnable managed agents work in mock mode with auditable domain-to-range traces and no live provider key.
+
 ## Next
 
 - Prepare the productization branch for pull-request review and approval

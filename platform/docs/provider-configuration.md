@@ -115,6 +115,12 @@ set LLM_MODEL=gpt-4o-mini
 pytest tests/test_provider_configuration_smoke.py
 ```
 
+`OPENAI_API_KEY` is the clearest name for OpenAI deployments. `LLM_API_KEY`
+or `API_KEY` can also be used as generic private provider-key aliases when the
+selected provider needs a single API key. Keep these values in `.env`, shell
+exports, deployment secrets, or a secret manager; do not put them in
+console-managed `user.env`.
+
 Custom provider:
 
 ```bash

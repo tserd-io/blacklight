@@ -170,3 +170,43 @@ Confirmed behavior:
 Documented limitation:
 
 - Milestone 7 remains intentionally read-only. Agent editing, promotion, graph execution, and managed-agent run behavior are deferred to later milestones.
+
+### Milestone 8 Final QA Record
+
+Milestone 8 final QA was run on July 9, 2026 for the managed-agent run and traceability branch.
+
+Passed checks:
+
+- `ruff check .`
+- `pytest`
+- `blacklight agents run ticket_classifier_agent --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --verbose --trace-db-path qa-milestone8.sqlite3 --session-id milestone8-cli-verbose`
+- `blacklight agents run ticket_classifier_agent --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --json --trace-db-path qa-milestone8.sqlite3 --session-id milestone8-cli-json`
+- `blacklight trace show <trace_id> --trace-db-path qa-milestone8.sqlite3 --json`
+- FastAPI TestClient smoke check for `POST /api/agents/ticket_classifier_agent/runs`
+- FastAPI TestClient smoke check for `/api/console/traces/<trace_id>`
+- FastAPI TestClient smoke check for `/console/agents`
+- FastAPI TestClient smoke check for `POST /console/agents/ticket_classifier_agent/run`
+- opt-in live OpenAI provider smoke with `RUN_OPENAI_PROVIDER_SMOKE=1`, `LLM_MODEL=gpt-4o-mini`, and a private API key loaded from `.env`
+- live OpenAI managed-agent run with `LLM_PROVIDER=openai`, `LLM_MODEL=gpt-4o-mini`, and structured output against `ticket_classifier_agent`
+- opt-in live Ollama provider smoke with `RUN_OLLAMA_PROVIDER_SMOKE=1`, `OLLAMA_BASE_URL=http://localhost:11434`, and `LLM_MODEL=llama3.1:8b`
+- live Ollama managed-agent run with `LLM_PROVIDER=custom`, `LLM_CUSTOM_PROVIDER=blacklight.providers.ollama_provider:OllamaProvider`, and trace inspection through `blacklight trace show`
+
+Confirmed behavior:
+
+- `ticket_classifier_agent` is runnable from CLI, API, and console using mock mode without live provider credentials.
+- CLI and API run payloads expose run ID, trace ID, validation state, guardrail outcome, review state, review reason, and routing decision.
+- Trace detail exposes domain-to-range evidence for domain boundaries, context bundle, provider call, validation, guardrails, range output, review state, and eval evidence.
+- Eval evidence points to the public-safe fixture suite and links to a concrete eval run/case when one exists.
+- Agent run envelopes store hashes and lengths for raw inputs, not raw subject, body, rendered prompts, API keys, or provider secrets.
+- Console run results expose trace links, run JSON, session links, review state, eval evidence, and copyable CLI commands.
+- OpenAI live-provider runs use the same generic provider request contract as mock/local providers, with provider-specific mapping for JSON object or JSON schema output.
+- Ollama live-provider runs use local JSON mode and the same guardrail validation path. The validation layer accepts narrow, auditable local-model label normalization for known enum drift while still rejecting unknown categories, severities, or malformed outputs.
+
+Live-provider finding:
+
+- The first live OpenAI managed-agent run proved provider connectivity but failed validation because generic JSON object mode did not enforce governed enum values. The branch now sends a provider-agnostic `output_schema` for ticket classification, which OpenAI maps to structured outputs and Ollama maps to JSON mode where applicable. The follow-up live OpenAI run completed with an accepted `billing` / `medium` classification.
+- The first live Ollama managed-agent run proved local runtime connectivity but returned common label drift such as `Financial/ Billing`, `Financial/Invoicing`, `Low/Moderate`, and confidence labels. The branch now normalizes only explicit known aliases before schema validation; the follow-up live Ollama run completed with an accepted `billing` classification and traceable `ollama` provider evidence.
+
+Documented limitation:
+
+- Browser click-through was verified through FastAPI TestClient console smoke checks rather than a live browser automation pass on this branch.

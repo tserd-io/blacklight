@@ -487,6 +487,12 @@ def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
     assert trace_show_payload["trace"]["domain_to_range"]["eval_evidence"]["suite_id"] == (
         "ticket_classifier:ticket_classification.jsonl"
     )
+    assert trace_show_payload["trace"]["domain_to_range"]["eval_evidence"]["agent_id"] == (
+        "ticket_classifier_agent"
+    )
+    assert trace_show_payload["trace"]["domain_to_range"]["eval_evidence"]["workflow_id"] == (
+        "ticket_classifier"
+    )
     assert trace_show_payload["trace"]["eval_evidence"]["cli_commands"]["run_suite"].startswith(
         "blacklight eval run --trace-db-path"
     )

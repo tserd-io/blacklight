@@ -22,6 +22,66 @@ def test_validate_ticket_output_accepts_schema():
     assert validation.outcome == GuardrailOutcome.accepted
 
 
+def test_validate_ticket_output_normalizes_common_local_model_enum_drift():
+    text = json.dumps(
+        {
+            "category": "Financial/ Billing",
+            "severity": "Low",
+            "confidence": 0.8,
+            "rationale": "The ticket asks about duplicate billing.",
+            "needs_review": False,
+        }
+    )
+
+    parsed, validation = validate_ticket_output(text)
+
+    assert parsed is not None
+    assert parsed.category.value == "billing"
+    assert parsed.severity.value == "low"
+    assert validation.passed
+    assert validation.outcome == GuardrailOutcome.accepted
+
+
+def test_validate_ticket_output_normalizes_local_model_label_drift():
+    text = json.dumps(
+        {
+            "category": "Financial/Invoicing",
+            "severity": "Low/Moderate",
+            "confidence": "High",
+            "rationale": "The ticket asks about duplicate billing.",
+            "needs_review": False,
+        }
+    )
+
+    parsed, validation = validate_ticket_output(text)
+
+    assert parsed is not None
+    assert parsed.category.value == "billing"
+    assert parsed.severity.value == "medium"
+    assert parsed.confidence == 0.9
+    assert validation.passed
+    assert validation.outcome == GuardrailOutcome.accepted
+
+
+def test_validate_ticket_output_still_rejects_unknown_enum_values():
+    text = json.dumps(
+        {
+            "category": "moonlight",
+            "severity": "sideways",
+            "confidence": 0.8,
+            "rationale": "Unknown routing labels.",
+            "needs_review": False,
+        }
+    )
+
+    parsed, validation = validate_ticket_output(text)
+
+    assert parsed is None
+    assert not validation.passed
+    assert validation.outcome == GuardrailOutcome.rejected
+    assert validation.errors
+
+
 def test_validate_ticket_output_flags_pii():
     text = json.dumps(
         {

@@ -28,6 +28,9 @@ class GuardrailOutcome(str, Enum):
 class ProviderRequest(BaseModel):
     prompt: str
     model: str
+    output_format: str | None = None
+    output_schema_name: str | None = None
+    output_schema: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -46,6 +49,35 @@ class TicketClassification(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     rationale: str
     needs_review: bool = False
+
+
+def ticket_classification_output_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["category", "severity", "confidence", "rationale", "needs_review"],
+        "properties": {
+            "category": {
+                "type": "string",
+                "enum": [category.value for category in TicketCategory],
+            },
+            "severity": {
+                "type": "string",
+                "enum": [severity.value for severity in Severity],
+            },
+            "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+            },
+            "rationale": {
+                "type": "string",
+            },
+            "needs_review": {
+                "type": "boolean",
+            },
+        },
+    }
 
 
 class TicketRequest(BaseModel):

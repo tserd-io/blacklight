@@ -878,7 +878,7 @@ def _provider_payload(provider: str) -> dict[str, Any]:
         "model": settings.model if settings.provider == provider else None,
         "configuration_hint": {
             "mock": "Ready by default for demos and tests.",
-            "openai": "Set LLM_PROVIDER=openai and OPENAI_API_KEY.",
+            "openai": "Set LLM_PROVIDER=openai and OPENAI_API_KEY, LLM_API_KEY, or API_KEY.",
             "custom": "Set LLM_PROVIDER=custom and LLM_CUSTOM_PROVIDER to an import path.",
         }[provider],
     }
