@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from blacklight.eval_evidence import build_eval_evidence
+
 SESSION_STATUS_FILTERS = {"all", "accepted", "needs_review", "rejected", "failed"}
 
 
@@ -22,6 +24,7 @@ def trace_detail(trace: dict[str, Any]) -> dict[str, Any]:
         "validation_passed": trace["validation_passed"],
         "guardrail_outcome": trace["guardrail_outcome"],
         "error_category": trace["error_category"],
+        "eval_evidence": build_eval_evidence(trace),
         "created_at": trace["created_at"],
     }
 
@@ -36,6 +39,14 @@ def trace_domain_to_range_detail(
             **detail,
             "domain_to_range": None,
         }
+    eval_evidence = {
+        **envelope.get("eval_evidence", {}),
+        **build_eval_evidence(
+            trace,
+            agent_id=envelope["agent_id"],
+            workflow_id=envelope["workflow_id"],
+        ),
+    }
     return {
         **detail,
         "domain_to_range": {
@@ -57,7 +68,7 @@ def trace_domain_to_range_detail(
             "review": envelope["review"],
             "review_reason": envelope["review"]["reason"],
             "routing_decision": envelope["review"]["routing_decision"],
-            "eval_evidence": envelope["eval_evidence"],
+            "eval_evidence": eval_evidence,
         },
     }
 

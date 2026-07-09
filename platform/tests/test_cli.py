@@ -213,6 +213,15 @@ def test_eval_history_commands_read_persisted_runs(capsys, tmp_path):
     assert show_payload["eval_run"]["cases"]
     assert show_payload["eval_run"]["cases"][0]["trace_request_id"]
     assert show_payload["traces"][0]["eval_run_id"] == run_payload["eval_run_id"]
+    assert show_payload["traces"][0]["eval_evidence"]["linked"] is True
+    assert show_payload["traces"][0]["eval_evidence"]["eval_run_id"] == run_payload["eval_run_id"]
+    assert show_payload["traces"][0]["eval_evidence"]["case_id"] == "billing_refund"
+    assert show_payload["traces"][0]["eval_evidence"]["fixture_name"] == (
+        "ticket_classification.jsonl"
+    )
+    assert "blacklight eval show" in show_payload["traces"][0]["eval_evidence"]["cli_commands"][
+        "show_eval"
+    ]
 
 
 def test_metrics_command_reads_trace_db(capsys, tmp_path):
@@ -441,6 +450,10 @@ def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
     assert envelope["range_output"]["output"]["category"] == "billing"
     assert envelope["review"]["state"] == "accepted"
     assert envelope["review"]["reason"].startswith("Guardrails accepted")
+    assert envelope["eval_evidence"]["linked"] is False
+    assert envelope["eval_evidence"]["suite_id"] == "ticket_classifier:ticket_classification.jsonl"
+    assert envelope["eval_evidence"]["fixture_name"] == "ticket_classification.jsonl"
+    assert envelope["eval_evidence"]["links"]["eval_console"] == "/console/evals"
 
     list_exit_code = main(
         ["agents", "runs", "list", "--trace-db-path", str(trace_db_path)]
@@ -471,6 +484,12 @@ def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
     assert trace_show_payload["trace"]["domain_to_range"]["range"]["output"]["category"] == "billing"
     assert trace_show_payload["trace"]["domain_to_range"]["review"]["state"] == "accepted"
     assert trace_show_payload["trace"]["domain_to_range"]["eval_evidence"]["linked"] is False
+    assert trace_show_payload["trace"]["domain_to_range"]["eval_evidence"]["suite_id"] == (
+        "ticket_classifier:ticket_classification.jsonl"
+    )
+    assert trace_show_payload["trace"]["eval_evidence"]["cli_commands"]["run_suite"].startswith(
+        "blacklight eval run --trace-db-path"
+    )
 
 
 def test_agents_demo_command_runs_deterministic_mock_agent(

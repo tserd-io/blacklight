@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from blacklight.agents.registry import AgentDefinition
+from blacklight.eval_evidence import build_eval_evidence
 from blacklight.review import (
     review_reason_for_guardrail_outcome,
     review_routing_decision,
@@ -136,6 +137,12 @@ def build_agent_run_payload(
                 "validation_passed": trace["validation_passed"],
                 "guardrail_outcome": trace["guardrail_outcome"],
                 "error_category": trace["error_category"],
+                "eval_evidence": build_eval_evidence(
+                    trace,
+                    agent_id=agent.agent_id,
+                    workflow_id=agent.workflow_id,
+                    trace_db_path=db_path,
+                ),
             },
         }
         payload["trace"]["record"] = trace_detail(trace)
@@ -231,8 +238,12 @@ def build_agent_run_envelope(
             "queue_hint": payload["review"]["queue_hint"],
         },
         "eval_evidence": {
-            "eval_run_id": trace["eval_run_id"],
-            "linked": trace["eval_run_id"] is not None,
+            **build_eval_evidence(
+                trace,
+                agent_id=agent.agent_id,
+                workflow_id=agent.workflow_id,
+                trace_db_path=payload["trace"]["trace_db_path"],
+            ),
         },
     }
 

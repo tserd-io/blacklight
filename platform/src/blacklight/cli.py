@@ -25,6 +25,7 @@ from blacklight.evals.runner import (
     compare_ticket_classification_prompt_versions,
     run_ticket_classification_eval,
 )
+from blacklight.eval_evidence import build_eval_evidence
 from blacklight.examples.ticket_classifier import TicketClassifier
 from blacklight.local_models import local_model_status
 from blacklight.models import TicketRequest
@@ -243,11 +244,18 @@ def eval_show(args: argparse.Namespace) -> int:
     db_path = args.trace_db_path or settings.trace_db_path
     eval_store = EvalMetricStore(db_path)
     trace_store = TraceStore(db_path)
+    traces = trace_store.list_by_eval_run_id(args.eval_run_id)
     run = eval_store.get_run(args.eval_run_id)
     _print_json(
         {
             "eval_run": run,
-            "traces": trace_store.list_by_eval_run_id(args.eval_run_id),
+            "traces": [
+                {
+                    **trace,
+                    "eval_evidence": build_eval_evidence(trace, trace_db_path=db_path),
+                }
+                for trace in traces
+            ],
         }
     )
     return 0
@@ -566,6 +574,27 @@ def _format_agent_run_summary(payload: dict[str, Any]) -> str:
             f"  - {trace['session_command']}",
         ]
     )
+    eval_evidence = payload.get("trace_envelope", {}).get("eval_evidence", payload.get("eval_evidence"))
+    if eval_evidence:
+        lines.extend(
+            [
+                "",
+                "Eval Evidence",
+                f"  suite: {eval_evidence['suite_id']}",
+                f"  fixture: {eval_evidence['fixture_name']}",
+                f"  coverage: {eval_evidence['coverage']}",
+            ]
+        )
+        if eval_evidence["linked"]:
+            lines.extend(
+                [
+                    f"  eval run: {eval_evidence['eval_run_id']}",
+                    f"  case: {eval_evidence['case_id'] or '-'}",
+                    f"  inspect eval: {eval_evidence['cli_commands']['show_eval']}",
+                ]
+            )
+        else:
+            lines.append(f"  run suite: {eval_evidence['cli_commands']['run_suite']}")
     if "domain_to_range_traceability" in payload:
         evidence = payload["domain_to_range_traceability"]["evidence_fields"]
         lines.extend(
@@ -811,7 +840,14 @@ def trace_show(args: argparse.Namespace) -> int:
         _print_error(trace_not_found_error(args.request_id).as_payload())
         return 1
     envelope = agent_run_store.get(trace["agent_run_id"]) if trace["agent_run_id"] else None
-    _print_json({"trace": trace_domain_to_range_detail(trace, envelope)})
+    detail = trace_domain_to_range_detail(trace, envelope)
+    detail["eval_evidence"] = build_eval_evidence(
+        trace,
+        trace_db_path=args.trace_db_path or settings.trace_db_path,
+    )
+    if detail["domain_to_range"]:
+        detail["domain_to_range"]["eval_evidence"] = detail["eval_evidence"]
+    _print_json({"trace": detail})
     return 0
 
 
