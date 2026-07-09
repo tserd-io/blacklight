@@ -453,6 +453,7 @@ def test_console_dashboard_exposes_demo_and_recent_inspection_links(monkeypatch,
     assert "/console/review" in response.text
     assert "seed-demo:billing-success" in response.text
     assert "seed-demo-eval" in response.text
+    assert "/api/console/evals/seed-demo-eval" in response.text
     assert "blacklight demo --verbose" in response.text
     assert "blacklight seed demo-data" in response.text
 
@@ -732,6 +733,10 @@ def test_console_api_agent_run_envelope_lookup_links_trace(monkeypatch, tmp_path
     assert trace_response.json()["trace"]["domain_to_range"]["range"]["output"]["category"] == "billing"
     assert trace_response.json()["trace"]["domain_to_range"]["review"]["state"] == "accepted"
     assert trace_response.json()["trace"]["domain_to_range"]["eval_evidence"]["linked"] is False
+    assert trace_response.json()["trace"]["domain_to_range"]["eval_evidence"]["suite_id"] == (
+        "ticket_classifier:ticket_classification.jsonl"
+    )
+    assert trace_response.json()["trace"]["eval_evidence"]["links"]["eval_console"] == "/console/evals"
 
 
 def test_console_api_surfaces_return_state_and_cli(monkeypatch, tmp_path):
@@ -786,6 +791,13 @@ def test_console_api_eval_run_uses_mock_mode_and_persists_links(monkeypatch, tmp
     assert payload["eval_run"]["summary"]["case_count"] == 3
     assert len(payload["traces"]) == 3
     assert payload["traces"][0]["eval_run_id"] == eval_run_id
+    assert payload["traces"][0]["eval_evidence"]["linked"] is True
+    assert payload["traces"][0]["eval_evidence"]["eval_run_id"] == eval_run_id
+    assert payload["traces"][0]["eval_evidence"]["case_id"] == "billing_refund"
+    assert payload["traces"][0]["eval_evidence"]["links"]["eval_api"] == (
+        f"/api/console/evals/{eval_run_id}"
+    )
+    assert payload["traces"][0]["cli"]["eval"].startswith("blacklight eval show")
     assert payload["cli_command"] == payload["cli_commands"]["run"]
     assert "blacklight eval show" in payload["cli"]["show"]
     _assert_cli_command_parseable(payload["cli_commands"]["show"])

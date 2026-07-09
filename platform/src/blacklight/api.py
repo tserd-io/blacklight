@@ -23,6 +23,7 @@ from blacklight.errors import (
     session_not_found_error,
 )
 from blacklight.evals.runner import run_ticket_classification_eval
+from blacklight.eval_evidence import build_eval_evidence
 from blacklight.examples.ticket_classifier import TicketClassifier
 from blacklight.local_models import (
     DEFAULT_LOCAL_MODEL,
@@ -696,6 +697,7 @@ def _agent_run_summary_payload(run: dict[str, Any]) -> dict[str, Any]:
 
 
 def _agent_run_envelope_payload(envelope: dict[str, Any]) -> dict[str, Any]:
+    eval_evidence = envelope.get("eval_evidence", {})
     payload = {
         **envelope,
         "links": {
@@ -705,6 +707,11 @@ def _agent_run_envelope_payload(envelope: dict[str, Any]) -> dict[str, Any]:
             "session_api": f"/api/console/runs/{envelope['session_id']}",
         },
     }
+    if eval_evidence.get("links"):
+        payload["links"]["evals_api"] = eval_evidence["links"]["evals_api"]
+        payload["links"]["eval_console"] = eval_evidence["links"]["eval_console"]
+        if eval_evidence.get("linked"):
+            payload["links"]["eval_api"] = eval_evidence["links"]["eval_api"]
     payload.update(
         _cli_affordance(
             f"blacklight agents runs show {envelope['agent_run_id']} {_trace_db_arg()}",
@@ -723,6 +730,10 @@ def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
         **session_trace_detail(trace),
         "domain_to_range": trace_domain_to_range_detail(trace, envelope)["domain_to_range"],
     }
+    detail["eval_evidence"] = build_eval_evidence(
+        trace,
+        trace_db_path=settings.trace_db_path,
+    )
     payload = {
         **detail,
         "links": {
@@ -743,10 +754,9 @@ def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
             f"/sessions/{trace['session_id']}/review/{trace['request_id']}"
         )
     if trace["eval_run_id"]:
-        payload["links"]["eval_api"] = f"/api/console/evals/{trace['eval_run_id']}"
-        payload["cli_commands"]["eval"] = (
-            f"blacklight eval show {trace['eval_run_id']} {_trace_db_arg()}"
-        )
+        payload["links"]["eval_api"] = detail["eval_evidence"]["links"]["eval_api"]
+        payload["links"]["eval_console"] = detail["eval_evidence"]["links"]["eval_console"]
+        payload["cli_commands"]["eval"] = detail["eval_evidence"]["cli_commands"]["show_eval"]
         payload["cli"]["eval"] = payload["cli_commands"]["eval"]
     if trace["agent_run_id"]:
         payload["links"]["agent_run_api"] = f"/api/console/agent-runs/{trace['agent_run_id']}"
@@ -1254,11 +1264,12 @@ def _console_trace_row(trace: dict[str, Any]) -> str:
     status = escape(detail["status"])
     session_id = escape(trace["session_id"])
     request_id = escape(trace["request_id"])
-    inspect_href = (
-        f"/sessions/{session_id}/review/{request_id}"
-        if detail["reviewable"]
-        else f"/sessions/{session_id}"
-    )
+    if trace["eval_run_id"]:
+        inspect_href = f"/api/console/evals/{escape(str(trace['eval_run_id']))}"
+    elif detail["reviewable"]:
+        inspect_href = f"/sessions/{session_id}/review/{request_id}"
+    else:
+        inspect_href = f"/sessions/{session_id}"
     return f"""<tr>
   <td data-label="Time">{escape(trace["created_at"])}</td>
   <td data-label="Request"><code>{request_id}</code></td>
@@ -1368,9 +1379,19 @@ def _render_console_agent_run_result(payload: dict[str, Any]) -> HTMLResponse:
     eval_evidence = envelope.get("eval_evidence", {})
     if eval_evidence.get("linked"):
         eval_run_id = escape(str(eval_evidence["eval_run_id"]))
-        eval_link = f'<a href="/api/console/evals/{eval_run_id}">{eval_run_id}</a>'
+        case_id = eval_evidence.get("case_id") or "-"
+        eval_link = (
+            f'<a href="/api/console/evals/{eval_run_id}">{eval_run_id}</a>'
+            f"<p class=\"muted\">case: {escape(str(case_id))}</p>"
+        )
     else:
-        eval_link = "No eval linked to this ad hoc console run."
+        fixture_name = escape(str(eval_evidence.get("fixture_name", "ticket_classification.jsonl")))
+        run_suite = escape(eval_evidence.get("cli_commands", {}).get("run_suite", "blacklight eval run"))
+        eval_link = (
+            f"Known suite: <code>{fixture_name}</code>"
+            f'<p><a href="/console/evals">Open evals</a></p>'
+            f"<p class=\"muted\">Run evidence: <code>{run_suite}</code></p>"
+        )
     output_rows = ""
     if summary:
         output_rows = f"""
