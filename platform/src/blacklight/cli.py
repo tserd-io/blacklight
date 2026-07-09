@@ -32,7 +32,11 @@ from blacklight.observability.storage import TraceStore
 from blacklight.prompts.registry import PromptRegistry
 from blacklight.providers.factory import create_provider
 from blacklight.providers.mock import MockProvider
-from blacklight.session_history import summarize_session, trace_detail
+from blacklight.session_history import (
+    summarize_session,
+    trace_detail,
+    trace_domain_to_range_detail,
+)
 from blacklight.settings import load_settings
 
 DEMO_SUBJECT = "Refund request"
@@ -945,11 +949,13 @@ def trace_list(args: argparse.Namespace) -> int:
 def trace_show(args: argparse.Namespace) -> int:
     settings = load_settings()
     trace_store = TraceStore(args.trace_db_path or settings.trace_db_path)
+    agent_run_store = AgentRunStore(args.trace_db_path or settings.trace_db_path)
     trace = trace_store.get_by_request_id(args.request_id)
     if trace is None:
         _print_error(trace_not_found_error(args.request_id).as_payload())
         return 1
-    _print_json({"trace": trace_detail(trace)})
+    envelope = agent_run_store.get(trace["agent_run_id"]) if trace["agent_run_id"] else None
+    _print_json({"trace": trace_domain_to_range_detail(trace, envelope)})
     return 0
 
 
@@ -1268,6 +1274,12 @@ def build_parser() -> argparse.ArgumentParser:
             "--trace-db-path",
             default=None,
             help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+        )
+        trace_show_parser.add_argument(
+            "--json",
+            action="store_true",
+            dest="json_output",
+            help="Print stable structured JSON.",
         )
         trace_show_parser.set_defaults(func=trace_show)
 

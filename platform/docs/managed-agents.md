@@ -149,6 +149,7 @@ blacklight agents run ticket_classifier_agent --subject "Refund request" --body 
 blacklight agents run ticket_classifier_agent --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --verbose
 blacklight agents runs list
 blacklight agents runs show agent-run-...
+blacklight traces show trace-... --json
 ```
 
 API:
@@ -158,6 +159,7 @@ GET /api/agents
 GET /api/agents/ticket_classifier_agent
 GET /api/console/agent-runs
 GET /api/console/agent-runs/{agent_run_id}
+GET /api/console/traces/{trace_id}
 ```
 
 Console:

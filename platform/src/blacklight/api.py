@@ -42,6 +42,7 @@ from blacklight.prompts.registry import PromptRegistry
 from blacklight.session_history import (
     build_session_history,
     session_trace_detail,
+    trace_domain_to_range_detail,
 )
 from blacklight.settings import (
     SECRET_ENV_KEYS,
@@ -493,7 +494,11 @@ def _agent_run_envelope_payload(envelope: dict[str, Any]) -> dict[str, Any]:
 
 
 def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
-    detail = session_trace_detail(trace)
+    envelope = agent_run_store.get(trace["agent_run_id"]) if trace["agent_run_id"] else None
+    detail = {
+        **session_trace_detail(trace),
+        "domain_to_range": trace_domain_to_range_detail(trace, envelope)["domain_to_range"],
+    }
     payload = {
         **detail,
         "links": {
