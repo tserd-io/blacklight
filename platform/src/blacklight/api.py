@@ -31,6 +31,7 @@ from blacklight.observability.idempotency import (
     IdempotencyInProgressError,
     IdempotencyStore,
 )
+from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.reviews import ReviewDecisionStore
 from blacklight.observability.storage import TraceStore
@@ -55,6 +56,7 @@ settings = load_settings()
 trace_store = TraceStore(settings.trace_db_path)
 idempotency_store = IdempotencyStore(settings.trace_db_path)
 eval_store = EvalMetricStore(settings.trace_db_path)
+agent_run_store = AgentRunStore(settings.trace_db_path)
 review_store = ReviewDecisionStore(settings.trace_db_path)
 classifier: TicketClassifier | None = None
 classifier_startup_error: ProviderConfigurationError | None = None
@@ -448,6 +450,48 @@ def _prompt_payload(prompt_id: str, version: int | None = None) -> dict[str, Any
     return payload
 
 
+def _agent_run_summary_payload(run: dict[str, Any]) -> dict[str, Any]:
+    agent_run_id = run["agent_run_id"]
+    payload = {
+        **run,
+        "links": {
+            "api": f"/api/console/agent-runs/{agent_run_id}",
+            "trace_api": f"/api/console/traces/{run['trace_request_id']}",
+            "session_api": f"/api/console/runs/{run['session_id']}",
+        },
+    }
+    payload.update(
+        _cli_affordance(
+            f"blacklight agents runs show {agent_run_id} {_trace_db_arg()}",
+            show=f"blacklight agents runs show {agent_run_id} {_trace_db_arg()}",
+            list=f"blacklight agents runs list {_trace_db_arg()}",
+            trace=f"blacklight trace show {run['trace_request_id']} {_trace_db_arg()}",
+        )
+    )
+    return payload
+
+
+def _agent_run_envelope_payload(envelope: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        **envelope,
+        "links": {
+            "self": f"/api/console/agent-runs/{envelope['agent_run_id']}",
+            "trace_api": f"/api/console/traces/{envelope['trace_request_id']}",
+            "session_api": f"/api/console/runs/{envelope['session_id']}",
+        },
+    }
+    payload.update(
+        _cli_affordance(
+            f"blacklight agents runs show {envelope['agent_run_id']} {_trace_db_arg()}",
+            show=f"blacklight agents runs show {envelope['agent_run_id']} {_trace_db_arg()}",
+            list=f"blacklight agents runs list {_trace_db_arg()}",
+            trace=f"blacklight trace show {envelope['trace_request_id']} {_trace_db_arg()}",
+            session=f"blacklight session show {envelope['session_id']} {_trace_db_arg()}",
+        )
+    )
+    return payload
+
+
 def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
     detail = session_trace_detail(trace)
     payload = {
@@ -475,6 +519,12 @@ def _trace_payload(trace: dict[str, Any]) -> dict[str, Any]:
             f"blacklight eval show {trace['eval_run_id']} {_trace_db_arg()}"
         )
         payload["cli"]["eval"] = payload["cli_commands"]["eval"]
+    if trace["agent_run_id"]:
+        payload["links"]["agent_run_api"] = f"/api/console/agent-runs/{trace['agent_run_id']}"
+        payload["cli_commands"]["agent_run"] = (
+            f"blacklight agents runs show {trace['agent_run_id']} {_trace_db_arg()}"
+        )
+        payload["cli"]["agent_run"] = payload["cli_commands"]["agent_run"]
     return payload
 
 
@@ -799,6 +849,7 @@ def _user_env_payload(user_env: dict[str, str]) -> dict[str, Any]:
 def _reload_runtime_settings() -> None:
     global classifier
     global classifier_startup_error
+    global agent_run_store
     global eval_store
     global idempotency_store
     global review_store
@@ -809,6 +860,7 @@ def _reload_runtime_settings() -> None:
     trace_store = TraceStore(settings.trace_db_path)
     idempotency_store = IdempotencyStore(settings.trace_db_path)
     eval_store = EvalMetricStore(settings.trace_db_path)
+    agent_run_store = AgentRunStore(settings.trace_db_path)
     review_store = ReviewDecisionStore(settings.trace_db_path)
     try:
         classifier = _build_classifier()
@@ -1919,6 +1971,41 @@ def console_trace_json(request_id: str) -> dict[str, Any]:
         "cli_command": payload["cli_command"],
         "cli_commands": payload["cli_commands"],
         "cli": payload["cli"],
+    }
+
+
+@app.get("/api/console/agent-runs")
+def console_agent_runs_json(limit: int = Query(default=25, ge=1, le=500)) -> dict[str, Any]:
+    payload = {
+        "agent_runs": [
+            _agent_run_summary_payload(run)
+            for run in agent_run_store.list_recent(limit=limit)
+        ],
+    }
+    payload.update(
+        _cli_affordance(
+            f"blacklight agents runs list {_trace_db_arg()} --limit {limit}",
+            list=f"blacklight agents runs list {_trace_db_arg()} --limit {limit}",
+            run=(
+                "blacklight agents run ticket_classifier_agent "
+                "--subject 'Refund request' --body 'Customer asks for a refund after duplicate billing.'"
+            ),
+        )
+    )
+    return payload
+
+
+@app.get("/api/console/agent-runs/{agent_run_id}")
+def console_agent_run_json(agent_run_id: str) -> dict[str, Any]:
+    envelope = agent_run_store.get(agent_run_id)
+    if envelope is None:
+        raise HTTPException(status_code=404, detail=f"Agent run not found: {agent_run_id}")
+    agent_run = _agent_run_envelope_payload(envelope)
+    return {
+        "agent_run": agent_run,
+        "cli_command": agent_run["cli_command"],
+        "cli_commands": agent_run["cli_commands"],
+        "cli": agent_run["cli"],
     }
 
 

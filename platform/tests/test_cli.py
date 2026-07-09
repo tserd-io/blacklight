@@ -4,6 +4,7 @@ import pytest
 
 from blacklight.cli import main
 from blacklight.models import GuardrailOutcome, ProviderRequest, ProviderResponse, TraceRecord
+from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.storage import TraceStore
 
@@ -395,6 +396,7 @@ def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
     trace_store = TraceStore(trace_db_path)
     traces = trace_store.list_by_session_id("agent-run-session")
     agent_run_traces = trace_store.list_by_agent_run_id(run_id)
+    envelope = AgentRunStore(trace_db_path).get(run_id)
 
     assert exit_code == 0
     assert payload["agent_run"]["agent_id"] == "ticket_classifier_agent"
@@ -413,6 +415,36 @@ def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
     assert payload["validation"]["review_required"] is False
     assert payload["output_summary"]["category"] == "billing"
     assert payload["output"]["category"] == "billing"
+    assert payload["trace_envelope"]["agent_run_id"] == run_id
+    assert envelope is not None
+    assert envelope["agent_run_id"] == run_id
+    assert envelope["session_id"] == "agent-run-session"
+    assert envelope["trace_request_id"] == payload["trace"]["trace_id"]
+    assert envelope["domain_snapshot"]["prompt_ids"] == ["ticket_classifier"]
+    assert envelope["context_bundle"]["raw_inputs_persisted"] is False
+    assert envelope["context_bundle"]["prompt_text_persisted"] is False
+    assert envelope["context_bundle"]["inputs"]["subject"]["length"] == len("Refund request")
+    assert "Refund request" not in json.dumps(envelope)
+    assert "Customer asks for a refund after duplicate billing." not in json.dumps(envelope)
+    assert envelope["provider_call"]["prompt_text_persisted"] is False
+    assert envelope["validation"]["passed"] is True
+    assert envelope["guardrail"]["outcome"] == "accepted"
+    assert envelope["range_output"]["output"]["category"] == "billing"
+    assert envelope["review"]["state"] == "accepted"
+
+    list_exit_code = main(
+        ["agents", "runs", "list", "--trace-db-path", str(trace_db_path)]
+    )
+    list_payload = json.loads(capsys.readouterr().out)
+    show_exit_code = main(
+        ["agents", "runs", "show", run_id, "--trace-db-path", str(trace_db_path)]
+    )
+    show_payload = json.loads(capsys.readouterr().out)
+
+    assert list_exit_code == 0
+    assert list_payload["agent_runs"][0]["agent_run_id"] == run_id
+    assert show_exit_code == 0
+    assert show_payload["agent_run"] == envelope
 
 
 def test_agents_run_verbose_command_prints_traceable_summary(capsys, tmp_path):
@@ -467,6 +499,7 @@ def test_agents_run_json_command_reports_review_validation_path(capsys, tmp_path
     run_id = payload["agent_run"]["run_id"]
     trace_store = TraceStore(trace_db_path)
     trace = trace_store.list_by_session_id("agent-review-session")[0]
+    envelope = AgentRunStore(trace_db_path).get(run_id)
 
     assert exit_code == 0
     assert trace_store.list_by_agent_run_id(run_id)[0]["request_id"] == trace["request_id"]
@@ -477,6 +510,12 @@ def test_agents_run_json_command_reports_review_validation_path(capsys, tmp_path
     assert payload["output_summary"]["needs_review"] is True
     assert trace["validation_passed"] is False
     assert trace["guardrail_outcome"] == "needs_review"
+    assert envelope is not None
+    assert envelope["validation"]["passed"] is False
+    assert envelope["guardrail"]["outcome"] == "needs_review"
+    assert envelope["range_output"]["output"]["needs_review"] is True
+    assert envelope["review"]["state"] == "needs_review"
+    assert envelope["review"]["touch_decision"] == "block_downstream_touch"
 
 
 def test_agents_run_validation_failure_records_rejected_trace(
@@ -518,6 +557,7 @@ def test_agents_run_validation_failure_records_rejected_trace(
     captured = capsys.readouterr()
     payload = json.loads(captured.err)
     traces = TraceStore(trace_db_path).list_recent()
+    envelope = AgentRunStore(trace_db_path).get(payload["agent_run"]["run_id"])
 
     assert exit_code == 1
     assert captured.out == ""
@@ -535,6 +575,13 @@ def test_agents_run_validation_failure_records_rejected_trace(
     assert traces[0]["error_category"] == "validation_error"
     assert traces[0]["session_id"] == "agent-invalid-session"
     assert traces[0]["agent_run_id"] == payload["agent_run"]["run_id"]
+    assert envelope is not None
+    assert envelope["run_status"] == "failed"
+    assert envelope["validation"]["passed"] is False
+    assert envelope["validation"]["errors"]
+    assert envelope["guardrail"]["outcome"] == "rejected"
+    assert envelope["range_output"]["output"] is None
+    assert envelope["review"]["state"] == "rejected"
 
 
 def test_prompts_list_command_prints_prompt_metadata(capsys):

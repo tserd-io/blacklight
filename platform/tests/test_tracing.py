@@ -11,6 +11,7 @@ from blacklight.models import (
     TraceRecord,
 )
 from blacklight.observability.storage import TraceStore
+from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.providers.base import LLMProvider
 from blacklight.providers.mock import MockProvider
 
@@ -26,6 +27,38 @@ class InvalidJsonProvider(LLMProvider):
             input_tokens=1,
             output_tokens=2,
         )
+
+
+def test_agent_run_store_persists_trace_envelope(tmp_path):
+    store = AgentRunStore(tmp_path / "traces.sqlite3")
+    envelope = {
+        "agent_run_id": "agent-run-1",
+        "agent_id": "ticket_classifier_agent",
+        "agent_version": 1,
+        "workflow_id": "ticket_classifier",
+        "run_status": "completed",
+        "session_id": "session-a",
+        "trace_request_id": "trace-1",
+        "trace_id": "trace-1",
+        "domain_snapshot": {"prompt_ids": ["ticket_classifier"]},
+        "context_bundle": {"raw_inputs_persisted": False},
+        "provider_call": {"provider": "mock", "model": "mock-ticket-classifier"},
+        "validation": {"passed": True, "errors": []},
+        "guardrail": {"outcome": "accepted", "error_category": None},
+        "range_output": {"output": {"category": "billing"}},
+        "review": {"state": "accepted", "required": False},
+        "eval_evidence": {"eval_run_id": None, "linked": False},
+    }
+
+    store.insert(envelope)
+    stored = store.get("agent-run-1")
+    recent = store.list_recent()
+    session_runs = store.list_by_session_id("session-a")
+
+    assert stored == envelope
+    assert recent[0]["agent_run_id"] == "agent-run-1"
+    assert recent[0]["trace_request_id"] == "trace-1"
+    assert session_runs[0]["agent_run_id"] == "agent-run-1"
 
 
 def test_ticket_classifier_writes_trace(tmp_path):
