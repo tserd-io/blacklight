@@ -17,14 +17,15 @@ class TraceStore:
             conn.execute(
                 """
                 INSERT INTO traces (
-                  request_id, session_id, eval_run_id, prompt_id, prompt_version,
+                  request_id, session_id, eval_run_id, agent_run_id, prompt_id, prompt_version,
                   provider, model, latency_ms, input_tokens, output_tokens,
                   estimated_cost_usd, validation_passed, guardrail_outcome, error_category
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(request_id) DO UPDATE SET
                   session_id = excluded.session_id,
                   eval_run_id = excluded.eval_run_id,
+                  agent_run_id = excluded.agent_run_id,
                   prompt_id = excluded.prompt_id,
                   prompt_version = excluded.prompt_version,
                   provider = excluded.provider,
@@ -41,6 +42,7 @@ class TraceStore:
                     record.request_id,
                     record.session_id,
                     record.eval_run_id,
+                    record.agent_run_id,
                     record.prompt_id,
                     record.prompt_version,
                     record.provider,
@@ -86,7 +88,7 @@ class TraceStore:
             rows = conn.execute(
                 """
                 SELECT
-                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  created_at, request_id, session_id, eval_run_id, agent_run_id, prompt_id,
                   prompt_version, provider, model, latency_ms, input_tokens,
                   output_tokens, estimated_cost_usd, validation_passed,
                   guardrail_outcome, error_category
@@ -104,7 +106,7 @@ class TraceStore:
             row = conn.execute(
                 """
                 SELECT
-                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  created_at, request_id, session_id, eval_run_id, agent_run_id, prompt_id,
                   prompt_version, provider, model, latency_ms, input_tokens,
                   output_tokens, estimated_cost_usd, validation_passed,
                   guardrail_outcome, error_category
@@ -123,7 +125,7 @@ class TraceStore:
             rows = conn.execute(
                 """
                 SELECT
-                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  created_at, request_id, session_id, eval_run_id, agent_run_id, prompt_id,
                   prompt_version, provider, model, latency_ms, input_tokens,
                   output_tokens, estimated_cost_usd, validation_passed,
                   guardrail_outcome, error_category
@@ -135,13 +137,31 @@ class TraceStore:
             ).fetchall()
         return [self._row_to_dict(row) for row in rows]
 
+    def list_by_agent_run_id(self, agent_run_id: str) -> list[dict[str, Any]]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT
+                  created_at, request_id, session_id, eval_run_id, agent_run_id, prompt_id,
+                  prompt_version, provider, model, latency_ms, input_tokens,
+                  output_tokens, estimated_cost_usd, validation_passed,
+                  guardrail_outcome, error_category
+                FROM traces
+                WHERE agent_run_id = ?
+                ORDER BY id
+                """,
+                (agent_run_id,),
+            ).fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
     def list_by_session_id(self, session_id: str, limit: int = 50) -> list[dict[str, Any]]:
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 """
                 SELECT
-                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  created_at, request_id, session_id, eval_run_id, agent_run_id, prompt_id,
                   prompt_version, provider, model, latency_ms, input_tokens,
                   output_tokens, estimated_cost_usd, validation_passed,
                   guardrail_outcome, error_category
@@ -160,7 +180,7 @@ class TraceStore:
             rows = conn.execute(
                 """
                 SELECT
-                  created_at, request_id, session_id, eval_run_id, prompt_id,
+                  created_at, request_id, session_id, eval_run_id, agent_run_id, prompt_id,
                   prompt_version, provider, model, latency_ms, input_tokens,
                   output_tokens, estimated_cost_usd, validation_passed,
                   guardrail_outcome, error_category
@@ -184,6 +204,7 @@ class TraceStore:
                   request_id TEXT NOT NULL,
                   session_id TEXT NOT NULL DEFAULT 'anonymous',
                   eval_run_id TEXT,
+                  agent_run_id TEXT,
                   prompt_id TEXT NOT NULL,
                   prompt_version INTEGER NOT NULL,
                   provider TEXT NOT NULL,
@@ -213,6 +234,12 @@ class TraceStore:
             self._ensure_column(
                 conn,
                 table="traces",
+                column="agent_run_id",
+                definition="TEXT",
+            )
+            self._ensure_column(
+                conn,
+                table="traces",
                 column="guardrail_outcome",
                 definition="TEXT NOT NULL DEFAULT 'accepted'",
             )
@@ -220,6 +247,12 @@ class TraceStore:
                 """
                 CREATE INDEX IF NOT EXISTS idx_traces_eval_run_id
                 ON traces(eval_run_id)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_traces_agent_run_id
+                ON traces(agent_run_id)
                 """
             )
             self._dedupe_by_key(conn, table="traces", key_columns=["request_id"])

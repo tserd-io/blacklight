@@ -126,7 +126,37 @@ def test_trace_store_records_eval_run_id(tmp_path):
     assert trace["guardrail_outcome"] == "needs_review"
 
 
-def test_trace_store_adds_guardrail_outcome_column_to_existing_tables(tmp_path):
+def test_trace_store_records_agent_run_id(tmp_path):
+    store = TraceStore(tmp_path / "traces.sqlite3")
+
+    store.insert(
+        TraceRecord(
+            request_id="request-1",
+            session_id="session-a",
+            agent_run_id="agent-run-1",
+            prompt_id="ticket_classifier",
+            prompt_version=1,
+            provider="mock",
+            model="mock-ticket-classifier",
+            latency_ms=1.0,
+            input_tokens=10,
+            output_tokens=5,
+            estimated_cost_usd=0.0,
+            validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.accepted,
+        )
+    )
+
+    trace = store.get_by_request_id("request-1")
+    run_traces = store.list_by_agent_run_id("agent-run-1")
+
+    assert trace is not None
+    assert trace["session_id"] == "session-a"
+    assert trace["agent_run_id"] == "agent-run-1"
+    assert run_traces[0]["request_id"] == "request-1"
+
+
+def test_trace_store_adds_new_trace_columns_to_existing_tables(tmp_path):
     db_path = tmp_path / "traces.sqlite3"
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -173,8 +203,10 @@ def test_trace_store_adds_guardrail_outcome_column_to_existing_tables(tmp_path):
     trace = store.get_by_request_id("request-1")
 
     assert "guardrail_outcome" in columns
+    assert "agent_run_id" in columns
     assert trace is not None
     assert trace["guardrail_outcome"] == "rejected"
+    assert trace["agent_run_id"] is None
 
 
 def test_trace_store_metrics_group_by_provider_and_model(tmp_path):

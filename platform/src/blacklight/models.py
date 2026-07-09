@@ -53,6 +53,7 @@ class TicketRequest(BaseModel):
     body: str
     session_id: str | None = None
     idempotency_key: str | None = None
+    agent_run_id: str | None = None
 
 
 class ValidationResult(BaseModel):
@@ -66,6 +67,7 @@ class TraceRecord(BaseModel):
     request_id: str
     session_id: str = "anonymous"
     eval_run_id: str | None = None
+    agent_run_id: str | None = None
     prompt_id: str
     prompt_version: int
     provider: str

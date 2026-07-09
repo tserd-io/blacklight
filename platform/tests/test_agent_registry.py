@@ -34,6 +34,7 @@ def test_agent_registry_loads_ticket_classifier_agent():
     assert "review_export_touch_decision" in agent.trace_contract.required_steps
     assert "eval_evidence" in agent.trace_contract.required_steps
     assert "agent_id" in agent.trace_contract.evidence_fields
+    assert "agent_run_id" in agent.trace_contract.evidence_fields
     assert "eval_run_id" in agent.trace_contract.eval_evidence
 
 
