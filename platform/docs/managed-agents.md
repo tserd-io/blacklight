@@ -123,7 +123,18 @@ Managed agent profiles are inspectable before they become editable. Profiles let
 - eval evidence
 - CLI/API/console paths
 
-The first run surface keeps that contract intact. `blacklight agents run ticket_classifier_agent` executes the existing ticket-classifier workflow, writes the same trace evidence, and returns the run ID, trace ID, validation result, guardrail/review state, and output summary when validation produces a usable output. When a caller supplies `--session-id`, the trace keeps that session id for session history, rate limiting, and user grouping. The durable run link is stored separately as `agent_run_id` on the trace row. Rejected validation failures still return an inspectable failed-run payload with run ID, trace ID, session ID, guardrail outcome, validation errors, and trace/session inspect commands.
+The first run surface keeps that contract intact. `blacklight agents run ticket_classifier_agent` executes the existing ticket-classifier workflow, writes the same trace evidence, and returns the run ID, trace ID, validation result, guardrail/review state, and output summary when validation produces a usable output. When a caller supplies `--session-id`, the trace keeps that session id for session history, rate limiting, and user grouping. The durable run link is stored separately as `agent_run_id` on the trace row.
+
+Agent runs are also persisted in an `agent_runs` table as a first-class trace envelope. The envelope records:
+
+- the domain snapshot from the managed-agent definition
+- a context bundle with input field names, lengths, and hashes
+- prompt/provider call references without rendered prompt text
+- validation and guardrail outcomes
+- range output, review state, and touch/export decisions
+- eval evidence links when available
+
+Rejected validation failures still return and persist an inspectable failed-run payload with run ID, trace ID, session ID, guardrail outcome, validation errors, and trace/session inspect commands. Raw subject/body text, rendered prompts, provider keys, and secrets are not written to the envelope.
 
 ## Current Surfaces
 
@@ -136,6 +147,8 @@ blacklight agents show ticket_classifier_agent --json
 blacklight agents run ticket_classifier_agent --subject "Refund request" --body "Customer asks for a refund after duplicate billing."
 blacklight agents run ticket_classifier_agent --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --json
 blacklight agents run ticket_classifier_agent --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --verbose
+blacklight agents runs list
+blacklight agents runs show agent-run-...
 ```
 
 API:
@@ -143,6 +156,8 @@ API:
 ```text
 GET /api/agents
 GET /api/agents/ticket_classifier_agent
+GET /api/console/agent-runs
+GET /api/console/agent-runs/{agent_run_id}
 ```
 
 Console:

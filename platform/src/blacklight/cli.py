@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -24,6 +25,7 @@ from blacklight.evals.runner import (
 from blacklight.examples.ticket_classifier import TicketClassifier
 from blacklight.local_models import local_model_status
 from blacklight.models import TicketRequest
+from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.idempotency import IdempotencyStore
 from blacklight.observability.storage import TraceStore
@@ -53,6 +55,10 @@ def _print_text_error(message: str) -> None:
 
 def _print_text(text: str) -> None:
     print(text)
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _quote_command_arg(value: str) -> str:
@@ -615,6 +621,95 @@ def _agent_run_payload(
     return payload
 
 
+def _agent_run_envelope(
+    *,
+    agent: AgentDefinition,
+    run_id: str,
+    session_id: str,
+    subject: str,
+    body: str,
+    trace: dict[str, Any],
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    output = payload["output"]
+    validation = payload["validation"]
+    review_state = validation["review_state"]
+    return {
+        "agent_run_id": run_id,
+        "agent_id": agent.agent_id,
+        "agent_version": agent.version,
+        "workflow_id": agent.workflow_id,
+        "run_status": payload["agent_run"]["run_status"],
+        "session_id": session_id,
+        "trace_request_id": trace["request_id"],
+        "trace_id": trace["request_id"],
+        "domain_snapshot": {
+            "retrieval_surface": agent.domain.retrieval_surface,
+            "context_inputs": agent.domain.context_inputs,
+            "context_boundaries": agent.domain.context_boundaries,
+            "tools": agent.domain.tools,
+            "provider_policy": agent.domain.provider_policy,
+            "prompt_ids": agent.domain.prompt_ids,
+            "prompt_versions": agent.domain.prompt_versions,
+            "limits": agent.domain.limits,
+            "raw_private_inputs_persisted": False,
+        },
+        "context_bundle": {
+            "input_fields": ["subject", "body", "session_id"],
+            "inputs": {
+                "subject": {
+                    "length": len(subject),
+                    "sha256": _sha256_text(subject),
+                },
+                "body": {
+                    "length": len(body),
+                    "sha256": _sha256_text(body),
+                },
+                "session_id": session_id,
+            },
+            "raw_inputs_persisted": False,
+            "prompt_text_persisted": False,
+            "privacy_note": "Raw subject, body, rendered prompts, API keys, and provider secrets are not stored in the agent run envelope.",
+        },
+        "provider_call": {
+            "trace_request_id": trace["request_id"],
+            "prompt_id": trace["prompt_id"],
+            "prompt_version": trace["prompt_version"],
+            "provider": trace["provider"],
+            "model": trace["model"],
+            "latency_ms": trace["latency_ms"],
+            "input_tokens": trace["input_tokens"],
+            "output_tokens": trace["output_tokens"],
+            "estimated_cost_usd": trace["estimated_cost_usd"],
+            "prompt_text_persisted": False,
+        },
+        "validation": {
+            "passed": validation["passed"],
+            "errors": validation["errors"],
+        },
+        "guardrail": {
+            "outcome": validation["guardrail_outcome"],
+            "error_category": validation["error_category"],
+        },
+        "range_output": {
+            "schema": agent.governed_range.output_schema,
+            "output": output,
+            "output_summary": payload["output_summary"],
+            "allowed_side_effects": agent.governed_range.allowed_side_effects,
+        },
+        "review": {
+            "state": review_state,
+            "required": validation["review_required"],
+            "touch_decision": "allow_read_only_output" if review_state == "accepted" else "block_downstream_touch",
+            "export_decision": "not_exported",
+        },
+        "eval_evidence": {
+            "eval_run_id": trace["eval_run_id"],
+            "linked": trace["eval_run_id"] is not None,
+        },
+    }
+
+
 def _format_agent_run_summary(payload: dict[str, Any]) -> str:
     run = payload["agent_run"]
     trace = payload["trace"]
@@ -683,6 +778,7 @@ def agents_run(args: argparse.Namespace) -> int:
     requested_session_id = args.session_id
     session_id = requested_session_id or run_id
     trace_store = TraceStore(db_path)
+    agent_run_store = AgentRunStore(db_path)
     classifier = TicketClassifier(
         provider=create_provider(settings),
         model=settings.model,
@@ -718,6 +814,17 @@ def agents_run(args: argparse.Namespace) -> int:
             verbose=args.verbose,
             validation_errors=[str(exc)],
         )
+        envelope = _agent_run_envelope(
+            agent=agent,
+            run_id=run_id,
+            session_id=session_id,
+            subject=args.subject,
+            body=args.body,
+            trace=trace,
+            payload=payload,
+        )
+        agent_run_store.insert(envelope)
+        payload["trace_envelope"] = envelope
         if args.json_output:
             _print_json(payload, file=sys.stderr)
         else:
@@ -735,10 +842,48 @@ def agents_run(args: argparse.Namespace) -> int:
         trace=trace,
         verbose=args.verbose,
     )
+    envelope = _agent_run_envelope(
+        agent=agent,
+        run_id=run_id,
+        session_id=session_id,
+        subject=args.subject,
+        body=args.body,
+        trace=trace,
+        payload=payload,
+    )
+    agent_run_store.insert(envelope)
+    payload["trace_envelope"] = envelope
     if args.json_output:
         _print_json(payload)
         return 0
     _print_text(_format_agent_run_summary(payload))
+    return 0
+
+
+def agents_runs_list(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    run_store = AgentRunStore(args.trace_db_path or settings.trace_db_path)
+    _print_json({"agent_runs": run_store.list_recent(limit=args.limit)})
+    return 0
+
+
+def agents_runs_show(args: argparse.Namespace) -> int:
+    settings = load_settings()
+    run_store = AgentRunStore(args.trace_db_path or settings.trace_db_path)
+    envelope = run_store.get(args.agent_run_id)
+    if envelope is None:
+        _print_error(
+            {
+                "error": {
+                    "category": "not_found",
+                    "message": f"Agent run not found: {args.agent_run_id}",
+                    "likely_cause": "The run was not persisted in this trace database.",
+                    "next_step": "Run `blacklight agents runs list` with the same --trace-db-path and retry with a listed agent_run_id.",
+                }
+            }
+        )
+        return 1
+    _print_json({"agent_run": envelope})
     return 0
 
 
@@ -1058,6 +1203,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include domain-to-range evidence and full trace detail.",
     )
     agents_run_parser.set_defaults(func=agents_run)
+    agents_runs_parser = agents_subparsers.add_parser(
+        "runs",
+        help="Inspect persisted managed-agent run envelopes.",
+    )
+    agents_runs_subparsers = agents_runs_parser.add_subparsers(
+        dest="agents_runs_command",
+        required=True,
+    )
+    agents_runs_list_parser = agents_runs_subparsers.add_parser(
+        "list",
+        help="List persisted managed-agent runs.",
+    )
+    agents_runs_list_parser.add_argument("--limit", type=int, default=10, help="Rows to return.")
+    agents_runs_list_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    agents_runs_list_parser.set_defaults(func=agents_runs_list)
+    agents_runs_show_parser = agents_runs_subparsers.add_parser(
+        "show",
+        help="Show a persisted managed-agent run envelope.",
+    )
+    agents_runs_show_parser.add_argument("agent_run_id", help="Agent run id to inspect.")
+    agents_runs_show_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    agents_runs_show_parser.set_defaults(func=agents_runs_show)
 
     prompts_parser = subparsers.add_parser("prompts", help="Inspect prompt templates.")
     prompts_subparsers = prompts_parser.add_subparsers(dest="prompts_command", required=True)

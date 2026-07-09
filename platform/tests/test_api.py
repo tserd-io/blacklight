@@ -9,6 +9,7 @@ from blacklight.cli import build_parser
 from blacklight.demo_seed import seed_demo_data
 from blacklight.errors import GuardrailValidationError
 from blacklight.models import GuardrailOutcome, TraceRecord
+from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.reviews import ReviewDecisionStore
 from blacklight.observability.storage import TraceStore
@@ -171,9 +172,11 @@ def _patch_seeded_console_stores(monkeypatch, tmp_path):
     seed_demo_data(str(db_path))
     trace_store = TraceStore(db_path)
     eval_store = EvalMetricStore(db_path)
+    agent_run_store = AgentRunStore(db_path)
     review_store = ReviewDecisionStore(db_path)
     monkeypatch.setattr(api, "trace_store", trace_store)
     monkeypatch.setattr(api, "eval_store", eval_store)
+    monkeypatch.setattr(api, "agent_run_store", agent_run_store)
     monkeypatch.setattr(api, "review_store", review_store)
     monkeypatch.setattr(api, "local_model_status", lambda _settings: StaticLocalModelStatus())
     monkeypatch.setattr(api, "settings", replace(api.settings, trace_db_path=str(db_path)))
@@ -415,6 +418,68 @@ def test_console_api_workflow_run_returns_result_trace_and_cli(monkeypatch, tmp_
     assert len(traces) == 1
 
 
+def test_console_api_agent_run_envelope_lookup_links_trace(monkeypatch, tmp_path):
+    db_path = tmp_path / "agent-runs.sqlite3"
+    trace_store = TraceStore(db_path)
+    agent_run_store = AgentRunStore(db_path)
+    trace_store.insert(
+        TraceRecord(
+            request_id="trace-1",
+            session_id="agent-session",
+            agent_run_id="agent-run-1",
+            prompt_id="ticket_classifier",
+            prompt_version=1,
+            provider="mock",
+            model="mock-ticket-classifier",
+            latency_ms=1.0,
+            input_tokens=10,
+            output_tokens=5,
+            estimated_cost_usd=0.0,
+            validation_passed=True,
+            guardrail_outcome=GuardrailOutcome.accepted,
+        )
+    )
+    envelope = {
+        "agent_run_id": "agent-run-1",
+        "agent_id": "ticket_classifier_agent",
+        "agent_version": 1,
+        "workflow_id": "ticket_classifier",
+        "run_status": "completed",
+        "session_id": "agent-session",
+        "trace_request_id": "trace-1",
+        "trace_id": "trace-1",
+        "domain_snapshot": {"prompt_ids": ["ticket_classifier"]},
+        "context_bundle": {"raw_inputs_persisted": False},
+        "provider_call": {"provider": "mock", "model": "mock-ticket-classifier"},
+        "validation": {"passed": True, "errors": []},
+        "guardrail": {"outcome": "accepted", "error_category": None},
+        "range_output": {"output": {"category": "billing"}},
+        "review": {"state": "accepted", "required": False},
+        "eval_evidence": {"eval_run_id": None, "linked": False},
+    }
+    agent_run_store.insert(envelope)
+    monkeypatch.setattr(api, "trace_store", trace_store)
+    monkeypatch.setattr(api, "agent_run_store", agent_run_store)
+    monkeypatch.setattr(api, "settings", replace(api.settings, trace_db_path=str(db_path)))
+    client = TestClient(api.app)
+
+    list_response = client.get("/api/console/agent-runs")
+    show_response = client.get("/api/console/agent-runs/agent-run-1")
+    trace_response = client.get("/api/console/traces/trace-1")
+
+    assert list_response.status_code == 200
+    assert list_response.json()["agent_runs"][0]["agent_run_id"] == "agent-run-1"
+    assert show_response.status_code == 200
+    assert show_response.json()["agent_run"]["agent_run_id"] == "agent-run-1"
+    assert show_response.json()["agent_run"]["context_bundle"]["raw_inputs_persisted"] is False
+    assert "blacklight agents runs show agent-run-1" in show_response.json()["cli_command"]
+    assert trace_response.status_code == 200
+    assert trace_response.json()["trace"]["links"]["agent_run_api"] == (
+        "/api/console/agent-runs/agent-run-1"
+    )
+    assert "blacklight agents runs show agent-run-1" in trace_response.json()["trace"]["cli"]["agent_run"]
+
+
 def test_console_api_surfaces_return_state_and_cli(monkeypatch, tmp_path):
     _patch_seeded_console_stores(monkeypatch, tmp_path)
     client = TestClient(api.app)
@@ -426,6 +491,7 @@ def test_console_api_surfaces_return_state_and_cli(monkeypatch, tmp_path):
         ("/api/console/runs/seed-demo", "traces"),
         ("/api/console/traces", "traces"),
         ("/api/console/traces/seed-demo:billing-success", "trace"),
+        ("/api/console/agent-runs", "agent_runs"),
         ("/api/console/evals", "eval_runs"),
         ("/api/console/evals/seed-demo-eval", "eval_run"),
         ("/api/console/prompts", "prompts"),
