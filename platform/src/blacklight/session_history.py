@@ -10,6 +10,7 @@ def trace_detail(trace: dict[str, Any]) -> dict[str, Any]:
         "request_id": trace["request_id"],
         "session_id": trace["session_id"],
         "eval_run_id": trace["eval_run_id"],
+        "agent_run_id": trace["agent_run_id"],
         "prompt_id": trace["prompt_id"],
         "prompt_version": trace["prompt_version"],
         "provider": trace["provider"],

@@ -10,7 +10,7 @@ ticket_classifier_agent
 -> TicketClassification output
 ```
 
-The goal is not to create an autonomous agent builder yet. The goal is to make a workflow inspectable as an agent before it becomes editable, runnable as a graph node, or connected to broader tools and retrieval.
+The goal is not to create an autonomous agent builder yet. The goal is to make a workflow inspectable and runnable as a governed agent before it becomes editable, runnable as a graph node, or connected to broader tools and retrieval.
 
 ## Workflow, Agent, And Future Graph Node
 
@@ -83,7 +83,7 @@ domain boundary
 -> eval evidence
 ```
 
-This is why managed agents should be inspectable before they are editable. If a user can edit an agent before the domain, governed range, and trace contract are visible, the system becomes hard to audit. Inspectability creates the contract first; editing can come later with validation.
+This is why managed agents should be inspectable and traceable before they are editable. If a user can edit an agent before the domain, governed range, and trace contract are visible, the system becomes hard to audit. Inspectability creates the contract first; direct agent runs can prove the contract against the backed workflow, and editing can come later with validation.
 
 ## Graph Readiness
 
@@ -110,11 +110,9 @@ previous_node.governed_range must satisfy next_node.domain
 
 Graph execution frameworks such as LangGraph can be useful later, but they should execute graphs after Blacklight validates compatibility. They should not become the source of truth for whether a graph is safe.
 
-## Inspectable Before Editable
+## Runnable After Inspectable, Before Editable
 
-The first milestone keeps managed agents read-only on purpose.
-
-Read-only profiles let users inspect:
+Managed agent profiles are inspectable before they become editable. Profiles let users inspect:
 
 - domain boundaries
 - governed range
@@ -125,7 +123,7 @@ Read-only profiles let users inspect:
 - eval evidence
 - CLI/API/console paths
 
-This gives business users and technical reviewers a shared description of what an agent is allowed to do. Later edit/create flows can validate changes against the same model instead of inventing a separate configuration surface.
+The first run surface keeps that contract intact. `blacklight agents run ticket_classifier_agent` executes the existing ticket-classifier workflow, writes the same trace evidence, and returns the run ID, trace ID, validation result, guardrail/review state, and output summary when validation produces a usable output. When a caller supplies `--session-id`, the trace keeps that session id for session history, rate limiting, and user grouping. The durable run link is stored separately as `agent_run_id` on the trace row. Rejected validation failures still return an inspectable failed-run payload with run ID, trace ID, session ID, guardrail outcome, validation errors, and trace/session inspect commands.
 
 ## Current Surfaces
 
@@ -135,6 +133,9 @@ CLI:
 blacklight agents list
 blacklight agents show ticket_classifier_agent
 blacklight agents show ticket_classifier_agent --json
+blacklight agents run ticket_classifier_agent --subject "Refund request" --body "Customer asks for a refund after duplicate billing."
+blacklight agents run ticket_classifier_agent --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --json
+blacklight agents run ticket_classifier_agent --subject "Refund request" --body "Customer asks for a refund after duplicate billing." --verbose
 ```
 
 API:
@@ -151,7 +152,7 @@ Console:
 /console/agents/ticket_classifier_agent
 ```
 
-These surfaces are read-only and require no private provider credentials.
+The CLI run surface is backed by the existing workflow and works in mock mode without private provider credentials. API and console run parity are expected follow-up surfaces.
 
 ## Non-Goals
 
@@ -161,7 +162,7 @@ Milestone 7 does not include:
 - agent editing or promotion workflows
 - autonomous tool selection
 - unrestricted retrieval
-- graph execution
+- graph execution beyond the single backed workflow run
 - LangGraph as a required runtime
 - side-effecting actions from agent output
 - document or form automation beyond the existing sample workflow

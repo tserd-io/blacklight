@@ -10,6 +10,7 @@ from typing import Any
 from blacklight.agents import AgentDefinition, AgentRegistry
 from blacklight.demo_seed import seed_demo_data
 from blacklight.errors import (
+    GuardrailValidationError,
     agent_not_found_error,
     describe_exception,
     is_known_error,
@@ -38,12 +39,16 @@ DEMO_SESSION_ID = "demo"
 DEMO_MODEL = "mock-ticket-classifier"
 
 
-def _print_json(payload: dict[str, Any]) -> None:
-    print(json.dumps(payload, indent=2))
+def _print_json(payload: dict[str, Any], *, file: Any | None = None) -> None:
+    print(json.dumps(payload, indent=2), file=file or sys.stdout)
 
 
 def _print_error(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, indent=2), file=sys.stderr)
+
+
+def _print_text_error(message: str) -> None:
+    print(message, file=sys.stderr)
 
 
 def _print_text(text: str) -> None:
@@ -357,6 +362,10 @@ def _agent_payload(agent: AgentDefinition) -> dict[str, Any]:
     payload["cli_commands"] = {
         "show": f"blacklight agents show {agent.agent_id}",
         "show_json": f"blacklight agents show {agent.agent_id} --json",
+        "run": (
+            f"blacklight agents run {agent.agent_id} "
+            f"--subject {json.dumps(DEMO_SUBJECT)} --body {json.dumps(DEMO_BODY)}"
+        ),
         "workflow": f"blacklight classify --subject {json.dumps(DEMO_SUBJECT)} --body {json.dumps(DEMO_BODY)}",
         "prompt": " ".join(
             [
@@ -435,6 +444,23 @@ def _format_agent_summary(agent: AgentDefinition) -> str:
     )
 
 
+def _get_agent_or_print_error(agent_id: str) -> AgentDefinition | None:
+    registry = AgentRegistry()
+    agent = registry.get_optional(agent_id)
+    if agent is None:
+        _print_error(agent_not_found_error(agent_id).as_payload())
+        return None
+    return agent
+
+
+def _assert_ticket_classifier_agent(agent: AgentDefinition) -> None:
+    if agent.workflow_id != "ticket_classifier":
+        raise ValueError(
+            f"Agent {agent.agent_id} is not runnable by this CLI yet. "
+            "Only workflow_id='ticket_classifier' is currently supported."
+        )
+
+
 def agents_list(args: argparse.Namespace) -> int:
     agents = AgentRegistry().list()
     payload = {
@@ -475,16 +501,244 @@ def agents_list(args: argparse.Namespace) -> int:
 
 
 def agents_show(args: argparse.Namespace) -> int:
-    registry = AgentRegistry()
-    if args.agent_id not in {agent.agent_id for agent in registry.list()}:
-        _print_error(agent_not_found_error(args.agent_id).as_payload())
+    agent = _get_agent_or_print_error(args.agent_id)
+    if agent is None:
         return 1
-    agent = registry.get(args.agent_id)
     payload = _agent_payload(agent)
     if args.json_output:
         _print_json(payload)
         return 0
     _print_text(_format_agent_summary(agent))
+    return 0
+
+
+def _agent_run_payload(
+    *,
+    agent: AgentDefinition,
+    run_id: str,
+    requested_session_id: str | None,
+    session_id: str,
+    db_path: str,
+    result: Any | None,
+    trace: dict[str, Any],
+    verbose: bool,
+    validation_errors: list[str] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "agent_run": {
+            "run_id": run_id,
+            "agent_id": agent.agent_id,
+            "agent_version": agent.version,
+            "workflow_id": agent.workflow_id,
+            "run_status": "failed" if result is None else "completed",
+            "session_id": session_id,
+            "requested_session_id": requested_session_id,
+        },
+        "trace": {
+            "trace_id": trace["request_id"],
+            "request_id": trace["request_id"],
+            "session_id": trace["session_id"],
+            "agent_run_id": trace["agent_run_id"],
+            "session_linkage": (
+                "Trace session_id is the generated agent run ID and trace.agent_run_id stores the same value."
+                if requested_session_id is None
+                else "Trace session_id preserves the requested session, while trace.agent_run_id stores the durable run link."
+            ),
+            "trace_db_path": db_path,
+            "inspect_command": _command_string(
+                [
+                    "blacklight",
+                    "trace",
+                    "show",
+                    trace["request_id"],
+                    "--trace-db-path",
+                    db_path,
+                ]
+            ),
+            "session_command": _command_string(
+                [
+                    "blacklight",
+                    "session",
+                    "show",
+                    trace["session_id"],
+                    "--trace-db-path",
+                    db_path,
+                ]
+            ),
+        },
+        "validation": {
+            "passed": trace["validation_passed"],
+            "guardrail_outcome": trace["guardrail_outcome"],
+            "review_state": (
+                "needs_review"
+                if trace["guardrail_outcome"] == "needs_review"
+                else "rejected"
+                if trace["guardrail_outcome"] == "rejected"
+                else "accepted"
+            ),
+            "review_required": trace["guardrail_outcome"] in {"needs_review", "rejected"},
+            "error_category": trace["error_category"],
+            "errors": validation_errors or [],
+        },
+        "output_summary": None,
+        "output": None,
+    }
+    if result is not None:
+        payload["output_summary"] = {
+            "category": result.category.value,
+            "severity": result.severity.value,
+            "confidence": result.confidence,
+            "needs_review": result.needs_review,
+            "rationale": result.rationale,
+        }
+        payload["output"] = result.model_dump(mode="json")
+    if verbose:
+        payload["domain_to_range_traceability"] = {
+            "required_steps": agent.trace_contract.required_steps,
+            "evidence_fields": {
+                "agent_id": agent.agent_id,
+                "agent_version": agent.version,
+                "workflow_id": agent.workflow_id,
+                "session_id": session_id,
+                "agent_run_id": trace["agent_run_id"],
+                "request_id": trace["request_id"],
+                "prompt_id": trace["prompt_id"],
+                "prompt_version": trace["prompt_version"],
+                "provider": trace["provider"],
+                "model": trace["model"],
+                "validation_passed": trace["validation_passed"],
+                "guardrail_outcome": trace["guardrail_outcome"],
+                "error_category": trace["error_category"],
+            },
+        }
+        payload["trace"]["record"] = trace_detail(trace)
+    return payload
+
+
+def _format_agent_run_summary(payload: dict[str, Any]) -> str:
+    run = payload["agent_run"]
+    trace = payload["trace"]
+    validation = payload["validation"]
+    summary = payload["output_summary"]
+    lines = [
+        "Managed Agent Run",
+        "",
+        f"Agent: {run['agent_id']} v{run['agent_version']}",
+        f"Workflow: {run['workflow_id']}",
+        f"Status: {run['run_status']}",
+        f"Run ID: {run['run_id']}",
+        f"Trace ID: {trace['trace_id']}",
+        f"Session ID: {run['session_id']}",
+        "",
+        "Validation",
+        f"  passed: {str(validation['passed']).lower()}",
+        f"  guardrail outcome: {validation['guardrail_outcome']}",
+        f"  review state: {validation['review_state']}",
+    ]
+    if validation["errors"]:
+        lines.append(f"  errors: {'; '.join(validation['errors'])}")
+    if summary is not None:
+        lines.extend(
+            [
+                "",
+                "Output Summary",
+                f"  category: {summary['category']}",
+                f"  severity: {summary['severity']}",
+                f"  confidence: {summary['confidence']}",
+                f"  needs review: {str(summary['needs_review']).lower()}",
+                f"  rationale: {summary['rationale']}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "Inspect",
+            f"  - {trace['inspect_command']}",
+            f"  - {trace['session_command']}",
+        ]
+    )
+    if "domain_to_range_traceability" in payload:
+        evidence = payload["domain_to_range_traceability"]["evidence_fields"]
+        lines.extend(
+            [
+                "",
+                "Domain-To-Range Evidence",
+                f"  prompt: {evidence['prompt_id']} v{evidence['prompt_version']}",
+                f"  provider/model: {evidence['provider']} / {evidence['model']}",
+                f"  guardrail: {evidence['guardrail_outcome']}",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def agents_run(args: argparse.Namespace) -> int:
+    agent = _get_agent_or_print_error(args.agent_id)
+    if agent is None:
+        return 1
+    _assert_ticket_classifier_agent(agent)
+
+    settings = load_settings()
+    db_path = args.trace_db_path or settings.trace_db_path
+    run_id = f"agent-run-{uuid.uuid4()}"
+    requested_session_id = args.session_id
+    session_id = requested_session_id or run_id
+    trace_store = TraceStore(db_path)
+    classifier = TicketClassifier(
+        provider=create_provider(settings),
+        model=settings.model,
+        trace_store=trace_store,
+        idempotency_store=IdempotencyStore(db_path),
+        provider_timeout_seconds=settings.provider_timeout_seconds,
+        provider_max_retries=settings.provider_max_retries,
+        provider_rate_limit_requests=settings.provider_rate_limit_requests,
+        provider_rate_limit_window_seconds=settings.provider_rate_limit_window_seconds,
+    )
+    ticket = TicketRequest(
+        subject=args.subject,
+        body=args.body,
+        session_id=session_id,
+        idempotency_key=run_id,
+        agent_run_id=run_id,
+    )
+    try:
+        result = classifier.classify(ticket)
+    except GuardrailValidationError as exc:
+        traces = trace_store.list_by_agent_run_id(run_id)
+        if not traces:
+            raise
+        trace = traces[-1]
+        payload = _agent_run_payload(
+            agent=agent,
+            run_id=run_id,
+            requested_session_id=requested_session_id,
+            session_id=session_id,
+            db_path=db_path,
+            result=None,
+            trace=trace,
+            verbose=args.verbose,
+            validation_errors=[str(exc)],
+        )
+        if args.json_output:
+            _print_json(payload, file=sys.stderr)
+        else:
+            _print_text_error(_format_agent_run_summary(payload))
+        return 1
+    traces = trace_store.list_by_agent_run_id(run_id)
+    trace = traces[-1]
+    payload = _agent_run_payload(
+        agent=agent,
+        run_id=run_id,
+        requested_session_id=requested_session_id,
+        session_id=session_id,
+        db_path=db_path,
+        result=result,
+        trace=trace,
+        verbose=args.verbose,
+    )
+    if args.json_output:
+        _print_json(payload)
+        return 0
+    _print_text(_format_agent_run_summary(payload))
     return 0
 
 
@@ -775,6 +1029,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print stable structured JSON.",
     )
     agents_show_parser.set_defaults(func=agents_show)
+    agents_run_parser = agents_subparsers.add_parser(
+        "run",
+        help="Run a managed agent through its backed workflow.",
+    )
+    agents_run_parser.add_argument("agent_id", help="Agent id to run.")
+    agents_run_parser.add_argument("--subject", required=True, help="Support ticket subject.")
+    agents_run_parser.add_argument("--body", required=True, help="Support ticket body.")
+    agents_run_parser.add_argument(
+        "--session-id",
+        default=None,
+        help="Session id used for the agent run trace. Defaults to the generated run ID.",
+    )
+    agents_run_parser.add_argument(
+        "--trace-db-path",
+        default=None,
+        help="SQLite trace database path. Defaults to TRACE_DB_PATH or traces.sqlite3.",
+    )
+    agents_run_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Print stable structured JSON.",
+    )
+    agents_run_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Include domain-to-range evidence and full trace detail.",
+    )
+    agents_run_parser.set_defaults(func=agents_run)
 
     prompts_parser = subparsers.add_parser("prompts", help="Inspect prompt templates.")
     prompts_subparsers = prompts_parser.add_subparsers(dest="prompts_command", required=True)

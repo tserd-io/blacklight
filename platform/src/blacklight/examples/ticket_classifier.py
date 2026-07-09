@@ -130,6 +130,7 @@ class TicketClassifier:
                         TraceRecord(
                             request_id=request_id,
                             session_id=ticket.session_id or "anonymous",
+                            agent_run_id=ticket.agent_run_id,
                             prompt_id=self.prompt_id,
                             prompt_version=prompt_template.version,
                             provider=response.provider,
@@ -152,6 +153,7 @@ class TicketClassifier:
                         TraceRecord(
                             request_id=request_id,
                             session_id=ticket.session_id or "anonymous",
+                            agent_run_id=ticket.agent_run_id,
                             prompt_id=self.prompt_id,
                             prompt_version=prompt_template.version,
                             provider=self.provider.name,

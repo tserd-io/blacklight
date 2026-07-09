@@ -15,6 +15,7 @@
       "ticket subject",
       "ticket body",
       "session id",
+      "agent run id when invoked through the managed-agent CLI",
       "idempotency key when supplied by the caller"
     ],
     "context_boundaries": [
@@ -81,6 +82,7 @@
       "agent_version",
       "workflow_id",
       "session_id",
+      "agent_run_id",
       "request_id",
       "prompt_id",
       "prompt_version",

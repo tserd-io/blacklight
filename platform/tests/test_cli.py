@@ -3,7 +3,7 @@ import json
 import pytest
 
 from blacklight.cli import main
-from blacklight.models import GuardrailOutcome, TraceRecord
+from blacklight.models import GuardrailOutcome, ProviderRequest, ProviderResponse, TraceRecord
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.storage import TraceStore
 
@@ -369,6 +369,172 @@ def test_agents_show_missing_agent_prints_known_error(capsys):
     assert payload["error"]["category"] == "agent_not_found"
     assert payload["error"]["message"] == "Agent not found: missing_agent"
     assert "blacklight agents list" in payload["error"]["next_step"]
+
+
+def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
+    trace_db_path = tmp_path / "agent-run.sqlite3"
+
+    exit_code = main(
+        [
+            "agents",
+            "run",
+            "ticket_classifier_agent",
+            "--subject",
+            "Refund request",
+            "--body",
+            "Customer asks for a refund after duplicate billing.",
+            "--trace-db-path",
+            str(trace_db_path),
+            "--session-id",
+            "agent-run-session",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    run_id = payload["agent_run"]["run_id"]
+    trace_store = TraceStore(trace_db_path)
+    traces = trace_store.list_by_session_id("agent-run-session")
+    agent_run_traces = trace_store.list_by_agent_run_id(run_id)
+
+    assert exit_code == 0
+    assert payload["agent_run"]["agent_id"] == "ticket_classifier_agent"
+    assert payload["agent_run"]["workflow_id"] == "ticket_classifier"
+    assert payload["agent_run"]["run_id"].startswith("agent-run-")
+    assert payload["agent_run"]["run_status"] == "completed"
+    assert payload["agent_run"]["requested_session_id"] == "agent-run-session"
+    assert payload["agent_run"]["session_id"] == "agent-run-session"
+    assert payload["trace"]["trace_id"] == traces[0]["request_id"]
+    assert payload["trace"]["session_id"] == "agent-run-session"
+    assert payload["trace"]["agent_run_id"] == run_id
+    assert agent_run_traces[0]["request_id"] == payload["trace"]["trace_id"]
+    assert "preserves the requested session" in payload["trace"]["session_linkage"]
+    assert payload["validation"]["passed"] is True
+    assert payload["validation"]["guardrail_outcome"] == "accepted"
+    assert payload["validation"]["review_required"] is False
+    assert payload["output_summary"]["category"] == "billing"
+    assert payload["output"]["category"] == "billing"
+
+
+def test_agents_run_verbose_command_prints_traceable_summary(capsys, tmp_path):
+    trace_db_path = tmp_path / "agent-run.sqlite3"
+
+    exit_code = main(
+        [
+            "agents",
+            "run",
+            "ticket_classifier_agent",
+            "--subject",
+            "Refund request",
+            "--body",
+            "Customer asks for a refund after duplicate billing.",
+            "--trace-db-path",
+            str(trace_db_path),
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Managed Agent Run" in output
+    assert "Agent: ticket_classifier_agent v1" in output
+    assert "Run ID: agent-run-" in output
+    assert "Trace ID:" in output
+    assert "guardrail outcome: accepted" in output
+    assert "Domain-To-Range Evidence" in output
+    assert "blacklight trace show" in output
+
+
+def test_agents_run_json_command_reports_review_validation_path(capsys, tmp_path):
+    trace_db_path = tmp_path / "agent-run-review.sqlite3"
+
+    exit_code = main(
+        [
+            "agents",
+            "run",
+            "ticket_classifier_agent",
+            "--subject",
+            "Account contact update",
+            "--body",
+            "Synthetic customer asks to update contact email to sample@example.com.",
+            "--trace-db-path",
+            str(trace_db_path),
+            "--session-id",
+            "agent-review-session",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    run_id = payload["agent_run"]["run_id"]
+    trace_store = TraceStore(trace_db_path)
+    trace = trace_store.list_by_session_id("agent-review-session")[0]
+
+    assert exit_code == 0
+    assert trace_store.list_by_agent_run_id(run_id)[0]["request_id"] == trace["request_id"]
+    assert payload["validation"]["passed"] is False
+    assert payload["validation"]["guardrail_outcome"] == "needs_review"
+    assert payload["validation"]["review_state"] == "needs_review"
+    assert payload["validation"]["review_required"] is True
+    assert payload["output_summary"]["needs_review"] is True
+    assert trace["validation_passed"] is False
+    assert trace["guardrail_outcome"] == "needs_review"
+
+
+def test_agents_run_validation_failure_records_rejected_trace(
+    capsys,
+    monkeypatch,
+    tmp_path,
+):
+    class InvalidProvider:
+        name = "invalid-provider"
+
+        def complete(self, request: ProviderRequest) -> ProviderResponse:
+            return ProviderResponse(
+                text='{"category": "not-a-category"}',
+                provider=self.name,
+                model=request.model,
+                input_tokens=1,
+                output_tokens=1,
+            )
+
+    trace_db_path = tmp_path / "agent-run-invalid.sqlite3"
+    monkeypatch.setattr("blacklight.cli.create_provider", lambda _settings: InvalidProvider())
+
+    exit_code = main(
+        [
+            "agents",
+            "run",
+            "ticket_classifier_agent",
+            "--subject",
+            "Broken output",
+            "--body",
+            "Synthetic provider returns an invalid schema.",
+            "--trace-db-path",
+            str(trace_db_path),
+            "--session-id",
+            "agent-invalid-session",
+            "--json",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.err)
+    traces = TraceStore(trace_db_path).list_recent()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert payload["agent_run"]["run_status"] == "failed"
+    assert payload["agent_run"]["session_id"] == "agent-invalid-session"
+    assert payload["trace"]["agent_run_id"] == payload["agent_run"]["run_id"]
+    assert payload["validation"]["passed"] is False
+    assert payload["validation"]["guardrail_outcome"] == "rejected"
+    assert payload["validation"]["error_category"] == "validation_error"
+    assert payload["validation"]["errors"]
+    assert payload["output_summary"] is None
+    assert payload["output"] is None
+    assert traces[0]["validation_passed"] is False
+    assert traces[0]["guardrail_outcome"] == "rejected"
+    assert traces[0]["error_category"] == "validation_error"
+    assert traces[0]["session_id"] == "agent-invalid-session"
+    assert traces[0]["agent_run_id"] == payload["agent_run"]["run_id"]
 
 
 def test_prompts_list_command_prints_prompt_metadata(capsys):
