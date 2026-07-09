@@ -19,6 +19,7 @@ Milestone 1 is complete as a runnable MVP. The project now supports:
 - `blacklight` CLI entry points for classification, evals, metrics, health, prompts, and traces
 - configurable provider creation for mock, OpenAI, and user-owned providers
 - retry, timeout, per-session rate limiting, idempotency, and provider failure tracing
+- production quota direction should evolve from request-count throttling toward rolling token budgets with traceable quota decisions
 - richer eval reports with persisted run/case metrics and per-case trace links
 - deterministic mock-mode tests and smoke-checkable API/CLI workflows
 

@@ -75,13 +75,20 @@ def test_seed_demo_data_command_populates_mock_surfaces(capsys, tmp_path):
     exit_code = main(["seed", "demo-data", "--trace-db-path", str(trace_db_path)])
     payload = json.loads(capsys.readouterr().out)
     traces = TraceStore(trace_db_path).list_by_session_id("seed-demo", limit=20)
+    agent_runs = AgentRunStore(trace_db_path).list_by_session_id("seed-demo")
     eval_run = EvalMetricStore(trace_db_path).get_run("seed-demo-eval")
 
     assert exit_code == 0
     assert payload["seed"] == "mock_mode_demo_data"
     assert payload["runs"][1]["guardrail_outcome"] == "needs_review"
+    assert payload["runs"][1]["agent_run_id"] == "seed-demo-agent-run-account-needs-review"
+    assert payload["runs"][1]["review_state"] == "needs_review"
+    assert payload["runs"][1]["review_reason"].startswith("Guardrails routed")
     assert payload["eval_run"]["case_count"] == 3
     assert len(traces) == 5
+    assert len(agent_runs) == 2
+    assert agent_runs[1]["review_state"] == "needs_review"
+    assert agent_runs[1]["review_reason"].startswith("Guardrails routed")
     assert eval_run is not None
     assert eval_run["session_id"] == "seed-demo"
 
@@ -412,6 +419,7 @@ def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
     assert "preserves the requested session" in payload["trace"]["session_linkage"]
     assert payload["validation"]["passed"] is True
     assert payload["validation"]["guardrail_outcome"] == "accepted"
+    assert payload["validation"]["review_reason"].startswith("Guardrails accepted")
     assert payload["validation"]["review_required"] is False
     assert payload["output_summary"]["category"] == "billing"
     assert payload["output"]["category"] == "billing"
@@ -429,8 +437,10 @@ def test_agents_run_json_command_returns_run_and_trace_ids(capsys, tmp_path):
     assert envelope["provider_call"]["prompt_text_persisted"] is False
     assert envelope["validation"]["passed"] is True
     assert envelope["guardrail"]["outcome"] == "accepted"
+    assert envelope["guardrail"]["reason"].startswith("Guardrails accepted")
     assert envelope["range_output"]["output"]["category"] == "billing"
     assert envelope["review"]["state"] == "accepted"
+    assert envelope["review"]["reason"].startswith("Guardrails accepted")
 
     list_exit_code = main(
         ["agents", "runs", "list", "--trace-db-path", str(trace_db_path)]
@@ -524,6 +534,8 @@ def test_agents_run_verbose_command_prints_traceable_summary(capsys, tmp_path):
     assert "Run ID: agent-run-" in output
     assert "Trace ID:" in output
     assert "guardrail outcome: accepted" in output
+    assert "review reason: Guardrails accepted" in output
+    assert "routing decision: allow_read_only_output" in output
     assert "Domain-To-Range Evidence" in output
     assert "blacklight trace show" in output
 
@@ -558,6 +570,7 @@ def test_agents_run_json_command_reports_review_validation_path(capsys, tmp_path
     assert payload["validation"]["passed"] is False
     assert payload["validation"]["guardrail_outcome"] == "needs_review"
     assert payload["validation"]["review_state"] == "needs_review"
+    assert payload["validation"]["review_reason"].startswith("Guardrails routed")
     assert payload["validation"]["review_required"] is True
     assert payload["output_summary"]["needs_review"] is True
     assert trace["validation_passed"] is False
@@ -565,8 +578,10 @@ def test_agents_run_json_command_reports_review_validation_path(capsys, tmp_path
     assert envelope is not None
     assert envelope["validation"]["passed"] is False
     assert envelope["guardrail"]["outcome"] == "needs_review"
+    assert envelope["guardrail"]["reason"].startswith("Guardrails routed")
     assert envelope["range_output"]["output"]["needs_review"] is True
     assert envelope["review"]["state"] == "needs_review"
+    assert envelope["review"]["reason"].startswith("Guardrails routed")
     assert envelope["review"]["touch_decision"] == "block_downstream_touch"
 
 
@@ -618,6 +633,7 @@ def test_agents_run_validation_failure_records_rejected_trace(
     assert payload["trace"]["agent_run_id"] == payload["agent_run"]["run_id"]
     assert payload["validation"]["passed"] is False
     assert payload["validation"]["guardrail_outcome"] == "rejected"
+    assert payload["validation"]["review_reason"].startswith("Guardrails rejected")
     assert payload["validation"]["error_category"] == "validation_error"
     assert payload["validation"]["errors"]
     assert payload["output_summary"] is None
@@ -632,8 +648,10 @@ def test_agents_run_validation_failure_records_rejected_trace(
     assert envelope["validation"]["passed"] is False
     assert envelope["validation"]["errors"]
     assert envelope["guardrail"]["outcome"] == "rejected"
+    assert envelope["guardrail"]["reason"].startswith("Guardrails rejected")
     assert envelope["range_output"]["output"] is None
     assert envelope["review"]["state"] == "rejected"
+    assert envelope["review"]["reason"].startswith("Guardrails rejected")
 
 
 def test_prompts_list_command_prints_prompt_metadata(capsys):

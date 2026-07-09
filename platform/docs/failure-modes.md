@@ -182,6 +182,7 @@ Production extension:
 - distributed rate limiting across processes
 - per-user quotas
 - tenant-aware throttling
+- token-budget quotas that track rolling token usage with a running sum, not only request count
 - graceful retry-after responses
 
 ### Prompt version drift between environments

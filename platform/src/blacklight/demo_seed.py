@@ -4,9 +4,12 @@ from typing import Any
 
 from collections.abc import Callable
 
+from blacklight.agents import AgentRegistry
+from blacklight.agents.runs import build_agent_run_envelope, build_agent_run_payload
 from blacklight.evals.runner import run_ticket_classification_eval
 from blacklight.guardrails.validation import validate_ticket_output
 from blacklight.models import ProviderRequest, TraceRecord
+from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.cost import estimate_cost
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.storage import TraceStore
@@ -37,9 +40,11 @@ DEMO_TICKET_INPUTS = [
 
 def seed_demo_data(db_path: str) -> dict[str, Any]:
     trace_store = TraceStore(db_path)
+    agent_run_store = AgentRunStore(db_path)
     eval_store = EvalMetricStore(db_path)
     prompt_registry = PromptRegistry()
     prompt = prompt_registry.get("ticket_classifier")
+    agent = AgentRegistry().get("ticket_classifier_agent")
     provider = MockProvider()
 
     runs = [
@@ -48,6 +53,8 @@ def seed_demo_data(db_path: str) -> dict[str, Any]:
             prompt=prompt,
             provider=provider,
             trace_store=trace_store,
+            agent_run_store=agent_run_store,
+            agent=agent,
         )
         for sample in DEMO_TICKET_INPUTS
     ]
@@ -92,7 +99,10 @@ def _seed_ticket_run(
     prompt: PromptTemplate,
     provider: MockProvider,
     trace_store: TraceStore,
+    agent_run_store: AgentRunStore,
+    agent: Any,
 ) -> dict[str, Any]:
+    agent_run_id = f"seed-demo-agent-run-{sample['id'].replace('_', '-')}"
     rendered_prompt = prompt.render(subject=sample["subject"], body=sample["body"])
     response = provider.complete(
         ProviderRequest(
@@ -113,6 +123,7 @@ def _seed_ticket_run(
         TraceRecord(
             request_id=sample["trace_request_id"],
             session_id=DEMO_SEED_SESSION_ID,
+            agent_run_id=agent_run_id,
             prompt_id=prompt.prompt_id,
             prompt_version=prompt.version,
             provider=response.provider,
@@ -130,11 +141,37 @@ def _seed_ticket_run(
             error_category=None,
         )
     )
+    trace = trace_store.get_by_request_id(sample["trace_request_id"])
+    if trace is None:
+        raise RuntimeError(f"Seed trace was not written: {sample['trace_request_id']}")
+    payload = build_agent_run_payload(
+        agent=agent,
+        run_id=agent_run_id,
+        requested_session_id=DEMO_SEED_SESSION_ID,
+        session_id=DEMO_SEED_SESSION_ID,
+        db_path=str(trace_store.db_path),
+        result=parsed,
+        trace=trace,
+        verbose=True,
+    )
+    envelope = build_agent_run_envelope(
+        agent=agent,
+        run_id=agent_run_id,
+        session_id=DEMO_SEED_SESSION_ID,
+        subject=sample["subject"],
+        body=sample["body"],
+        trace=trace,
+        payload=payload,
+    )
+    agent_run_store.insert(envelope)
     return {
         "id": sample["id"],
+        "agent_run_id": agent_run_id,
         "trace_request_id": sample["trace_request_id"],
         "session_id": DEMO_SEED_SESSION_ID,
         "guardrail_outcome": validation.outcome.value,
+        "review_state": payload["review"]["state"],
+        "review_reason": payload["review"]["reason"],
         "validation_passed": validation.passed,
         "category": parsed.category.value if parsed else None,
         "needs_review": parsed.needs_review if parsed else False,

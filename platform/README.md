@@ -433,7 +433,7 @@ Blacklight Studio intentionally uses local, inspectable defaults. A production v
 - managed trace storage or OpenTelemetry export
 - stronger PII/secrets detection and policy-specific guardrails
 - reviewer queue integration for `needs_review` outcomes
-- provider-specific auth, quotas, and circuit breakers
+- provider-specific auth, rolling token-budget quotas, and circuit breakers
 - model/prompt comparison reports
 - deployment packaging and environment-specific configuration
 - live provider smoke tests gated behind secrets and explicit flags

@@ -290,6 +290,7 @@ These are intentionally out of scope for the starter:
 - provider plugin marketplace or discovery mechanism
 - advanced circuit breakers, backoff policies, and async orchestration
 - distributed rate limiting across multiple API processes
+- rolling token-budget quotas per tenant/user/model
 - external idempotency store for multi-host deployments
 - required local LLM runtime for CI
 - full PII redaction pipeline
@@ -305,7 +306,7 @@ Each item has a natural production path, but adding all of them would bury the c
 The next production version would likely replace local defaults with managed services while keeping the same boundaries:
 
 - replace SQLite traces with a database, warehouse table, or OpenTelemetry exporter
-- replace in-memory rate limiting with Redis or gateway-level quotas
+- replace in-memory rate limiting with Redis or gateway-level quotas that can enforce rolling token budgets, not only request counts
 - replace local prompt JSON with a governed prompt registry if team process requires it
 - route `needs_review` outputs to a task queue or review tool
 - add live provider smoke tests behind secrets and explicit flags

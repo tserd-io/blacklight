@@ -18,9 +18,9 @@ class AgentRunStore:
                 INSERT INTO agent_runs (
                   agent_run_id, session_id, trace_request_id, agent_id,
                   agent_version, workflow_id, run_status, review_state,
-                  guardrail_outcome, envelope_json
+                  guardrail_outcome, review_reason, envelope_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(agent_run_id) DO UPDATE SET
                   session_id = excluded.session_id,
                   trace_request_id = excluded.trace_request_id,
@@ -30,6 +30,7 @@ class AgentRunStore:
                   run_status = excluded.run_status,
                   review_state = excluded.review_state,
                   guardrail_outcome = excluded.guardrail_outcome,
+                  review_reason = excluded.review_reason,
                   envelope_json = excluded.envelope_json
                 """,
                 (
@@ -42,6 +43,7 @@ class AgentRunStore:
                     envelope["run_status"],
                     envelope["review"]["state"],
                     envelope["guardrail"]["outcome"],
+                    envelope["review"]["reason"],
                     json.dumps(envelope, sort_keys=True),
                 ),
             )
@@ -67,7 +69,7 @@ class AgentRunStore:
                 SELECT
                   created_at, agent_run_id, session_id, trace_request_id,
                   agent_id, agent_version, workflow_id, run_status,
-                  review_state, guardrail_outcome
+                  review_state, guardrail_outcome, review_reason
                 FROM agent_runs
                 ORDER BY id DESC
                 LIMIT ?
@@ -84,7 +86,7 @@ class AgentRunStore:
                 SELECT
                   created_at, agent_run_id, session_id, trace_request_id,
                   agent_id, agent_version, workflow_id, run_status,
-                  review_state, guardrail_outcome
+                  review_state, guardrail_outcome, review_reason
                 FROM agent_runs
                 WHERE session_id = ?
                 ORDER BY id ASC
@@ -111,9 +113,16 @@ class AgentRunStore:
                   run_status TEXT NOT NULL,
                   review_state TEXT NOT NULL,
                   guardrail_outcome TEXT NOT NULL,
+                  review_reason TEXT NOT NULL DEFAULT '',
                   envelope_json TEXT NOT NULL
                 )
                 """
+            )
+            self._ensure_column(
+                conn,
+                table="agent_runs",
+                column="review_reason",
+                definition="TEXT NOT NULL DEFAULT ''",
             )
             conn.execute(
                 """
@@ -133,3 +142,15 @@ class AgentRunStore:
                 ON agent_runs(trace_request_id)
                 """
             )
+
+    @staticmethod
+    def _ensure_column(
+        conn: sqlite3.Connection,
+        *,
+        table: str,
+        column: str,
+        definition: str,
+    ) -> None:
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

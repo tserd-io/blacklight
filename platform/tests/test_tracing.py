@@ -44,9 +44,18 @@ def test_agent_run_store_persists_trace_envelope(tmp_path):
         "context_bundle": {"raw_inputs_persisted": False},
         "provider_call": {"provider": "mock", "model": "mock-ticket-classifier"},
         "validation": {"passed": True, "errors": []},
-        "guardrail": {"outcome": "accepted", "error_category": None},
+        "guardrail": {
+            "outcome": "accepted",
+            "reason": "Guardrails accepted this output for read-only range use.",
+            "error_category": None,
+        },
         "range_output": {"output": {"category": "billing"}},
-        "review": {"state": "accepted", "required": False},
+        "review": {
+            "state": "accepted",
+            "required": False,
+            "reason": "Guardrails accepted this output for read-only range use.",
+            "routing_decision": "allow_read_only_output",
+        },
         "eval_evidence": {"eval_run_id": None, "linked": False},
     }
 
@@ -58,6 +67,7 @@ def test_agent_run_store_persists_trace_envelope(tmp_path):
     assert stored == envelope
     assert recent[0]["agent_run_id"] == "agent-run-1"
     assert recent[0]["trace_request_id"] == "trace-1"
+    assert recent[0]["review_reason"] == "Guardrails accepted this output for read-only range use."
     assert session_runs[0]["agent_run_id"] == "agent-run-1"
 
 
