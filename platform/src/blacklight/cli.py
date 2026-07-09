@@ -541,6 +541,8 @@ def _format_agent_run_summary(payload: dict[str, Any]) -> str:
         f"  passed: {str(validation['passed']).lower()}",
         f"  guardrail outcome: {validation['guardrail_outcome']}",
         f"  review state: {validation['review_state']}",
+        f"  review reason: {validation['review_reason']}",
+        f"  routing decision: {validation['routing_decision']}",
     ]
     if validation["errors"]:
         lines.append(f"  errors: {'; '.join(validation['errors'])}")
@@ -573,6 +575,7 @@ def _format_agent_run_summary(payload: dict[str, Any]) -> str:
                 f"  prompt: {evidence['prompt_id']} v{evidence['prompt_version']}",
                 f"  provider/model: {evidence['provider']} / {evidence['model']}",
                 f"  guardrail: {evidence['guardrail_outcome']}",
+                f"  review reason: {validation['review_reason']}",
             ]
         )
     return "\n".join(lines)

@@ -43,6 +43,7 @@ from blacklight.providers.factory import ProviderConfigurationError, create_prov
 from blacklight.providers.mock import MockProvider
 from blacklight.providers.reliability import ProviderCallError
 from blacklight.prompts.registry import PromptRegistry
+from blacklight.review import review_reason_for_guardrail_outcome, review_routing_decision
 from blacklight.session_history import (
     build_session_history,
     session_trace_detail,
@@ -183,11 +184,10 @@ def _session_history_payload(session_id: str, status: str, limit: int) -> dict[s
 
 
 def _review_reason(trace: dict[str, Any]) -> str:
-    if trace["guardrail_outcome"] == "needs_review":
-        return "Guardrails routed this output to human review."
-    if trace["guardrail_outcome"] == "rejected":
-        return "Guardrails rejected this output before automation."
-    return "Output requires review before downstream automation."
+    return review_reason_for_guardrail_outcome(
+        trace["guardrail_outcome"],
+        trace["error_category"],
+    )
 
 
 def _review_queue_payload(*, limit: int, include_decided: bool) -> dict[str, Any]:
@@ -667,6 +667,16 @@ def _agent_run_summary_payload(run: dict[str, Any]) -> dict[str, Any]:
     agent_run_id = run["agent_run_id"]
     payload = {
         **run,
+        "guardrail": {
+            "outcome": run["guardrail_outcome"],
+            "reason": run["review_reason"],
+        },
+        "review": {
+            "state": run["review_state"],
+            "required": run["review_state"] in {"needs_review", "rejected"},
+            "reason": run["review_reason"],
+            "routing_decision": review_routing_decision(run["review_state"]),
+        },
         "links": {
             "api": f"/api/agent-runs/{agent_run_id}",
             "console_api": f"/api/console/agent-runs/{agent_run_id}",
@@ -1352,6 +1362,7 @@ def _render_console_agent_run_result(payload: dict[str, Any]) -> HTMLResponse:
     trace_id = escape(payload["trace_id"])
     review_state = escape(validation["review_state"])
     guardrail = escape(validation["guardrail_outcome"])
+    review_reason = escape(validation["review_reason"])
     cli_command = payload["cli_command"]
     eval_link = ""
     eval_evidence = envelope.get("eval_evidence", {})
@@ -1377,7 +1388,7 @@ def _render_console_agent_run_result(payload: dict[str, Any]) -> HTMLResponse:
         ("Validation", f"passed={validation['passed']}"),
         ("Guardrails", validation["guardrail_outcome"]),
         ("Range Output", "TicketClassification"),
-        ("Review/Eval", validation["review_state"]),
+        ("Review/Eval", validation["review_reason"]),
     ]
     step_rows = "\n".join(
         f'<tr><td data-label="Step">{escape(label)}</td><td data-label="Evidence">{escape(str(value))}</td></tr>'
@@ -1390,7 +1401,7 @@ def _render_console_agent_run_result(payload: dict[str, Any]) -> HTMLResponse:
   <div class="panel"><h2>Run</h2><p><code>{run_id}</code></p><p><span class="status {escape(run["run_status"])}">{escape(_label(run["run_status"]))}</span></p></div>
   <div class="panel"><h2>Trace ID</h2><p><a href="/api/console/traces/{trace_id}"><code>{trace_id}</code></a></p></div>
   <div class="panel"><h2>Guardrail</h2><p><span class="status {guardrail}">{escape(_label(guardrail))}</span></p></div>
-  <div class="panel"><h2>Review</h2><p><span class="status {review_state}">{escape(_label(review_state))}</span></p></div>
+  <div class="panel"><h2>Review</h2><p><span class="status {review_state}">{escape(_label(review_state))}</span></p><p>{review_reason}</p></div>
 </section>
 <div class="toolbar">
   <a class="button" href="/api/console/traces/{trace_id}">Open Trace</a>

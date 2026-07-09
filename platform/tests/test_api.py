@@ -399,8 +399,11 @@ def test_agent_run_api_returns_review_routed_output(monkeypatch, tmp_path):
     assert payload["validation"]["guardrail_outcome"] == "needs_review"
     assert payload["validation"]["review_state"] == "needs_review"
     assert payload["validation"]["review_required"] is True
+    assert payload["validation"]["review_reason"].startswith("Guardrails routed")
+    assert payload["review"]["routing_decision"] == "block_downstream_touch"
     assert payload["output_summary"]["needs_review"] is True
     assert envelope["review"]["state"] == "needs_review"
+    assert envelope["review"]["reason"].startswith("Guardrails routed")
     assert envelope["review"]["touch_decision"] == "block_downstream_touch"
 
 
@@ -422,6 +425,7 @@ def test_agent_run_api_persists_failed_validation_payload(monkeypatch, tmp_path)
     assert payload["agent_run"]["run_status"] == "failed"
     assert payload["validation"]["guardrail_outcome"] == "rejected"
     assert payload["validation"]["review_state"] == "rejected"
+    assert payload["validation"]["review_reason"].startswith("Guardrails rejected")
     assert payload["validation"]["errors"]
     assert payload["output_summary"] is None
     assert payload["error"]["category"] == "validation_error"
@@ -431,6 +435,7 @@ def test_agent_run_api_persists_failed_validation_payload(monkeypatch, tmp_path)
     assert envelope is not None
     assert envelope["run_status"] == "failed"
     assert envelope["guardrail"]["outcome"] == "rejected"
+    assert envelope["review"]["reason"].startswith("Guardrails rejected")
 
 
 def test_console_dashboard_exposes_demo_and_recent_inspection_links(monkeypatch, tmp_path):
@@ -671,9 +676,18 @@ def test_console_api_agent_run_envelope_lookup_links_trace(monkeypatch, tmp_path
         "context_bundle": {"raw_inputs_persisted": False},
         "provider_call": {"provider": "mock", "model": "mock-ticket-classifier"},
         "validation": {"passed": True, "errors": []},
-        "guardrail": {"outcome": "accepted", "error_category": None},
+        "guardrail": {
+            "outcome": "accepted",
+            "reason": "Guardrails accepted this output for read-only range use.",
+            "error_category": None,
+        },
         "range_output": {"output": {"category": "billing"}},
-        "review": {"state": "accepted", "required": False},
+        "review": {
+            "state": "accepted",
+            "required": False,
+            "reason": "Guardrails accepted this output for read-only range use.",
+            "routing_decision": "allow_read_only_output",
+        },
         "eval_evidence": {"eval_run_id": None, "linked": False},
     }
     agent_run_store.insert(envelope)
@@ -688,6 +702,11 @@ def test_console_api_agent_run_envelope_lookup_links_trace(monkeypatch, tmp_path
 
     assert list_response.status_code == 200
     assert list_response.json()["agent_runs"][0]["agent_run_id"] == "agent-run-1"
+    assert list_response.json()["agent_runs"][0]["review"]["reason"].startswith("Guardrails accepted")
+    assert (
+        list_response.json()["agent_runs"][0]["review"]["routing_decision"]
+        == "allow_read_only_output"
+    )
     assert show_response.status_code == 200
     assert show_response.json()["agent_run"]["agent_run_id"] == "agent-run-1"
     assert show_response.json()["agent_run"]["context_bundle"]["raw_inputs_persisted"] is False
@@ -707,6 +726,9 @@ def test_console_api_agent_run_envelope_lookup_links_trace(monkeypatch, tmp_path
     assert trace_response.json()["trace"]["domain_to_range"]["provider"]["provider"] == "mock"
     assert trace_response.json()["trace"]["domain_to_range"]["validation"]["passed"] is True
     assert trace_response.json()["trace"]["domain_to_range"]["guardrails"]["outcome"] == "accepted"
+    assert trace_response.json()["trace"]["domain_to_range"]["review_reason"].startswith(
+        "Guardrails accepted"
+    )
     assert trace_response.json()["trace"]["domain_to_range"]["range"]["output"]["category"] == "billing"
     assert trace_response.json()["trace"]["domain_to_range"]["review"]["state"] == "accepted"
     assert trace_response.json()["trace"]["domain_to_range"]["eval_evidence"]["linked"] is False

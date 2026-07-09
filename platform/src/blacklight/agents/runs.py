@@ -5,6 +5,11 @@ import json
 from typing import Any
 
 from blacklight.agents.registry import AgentDefinition
+from blacklight.review import (
+    review_reason_for_guardrail_outcome,
+    review_routing_decision,
+    review_state_for_guardrail_outcome,
+)
 from blacklight.session_history import trace_detail
 
 
@@ -28,6 +33,11 @@ def build_agent_run_payload(
     verbose: bool,
     validation_errors: list[str] | None = None,
 ) -> dict[str, Any]:
+    review_state = review_state_for_guardrail_outcome(trace["guardrail_outcome"])
+    review_reason = review_reason_for_guardrail_outcome(
+        trace["guardrail_outcome"],
+        trace["error_category"],
+    )
     payload: dict[str, Any] = {
         "agent_run": {
             "run_id": run_id,
@@ -74,16 +84,28 @@ def build_agent_run_payload(
         "validation": {
             "passed": trace["validation_passed"],
             "guardrail_outcome": trace["guardrail_outcome"],
-            "review_state": (
-                "needs_review"
-                if trace["guardrail_outcome"] == "needs_review"
-                else "rejected"
-                if trace["guardrail_outcome"] == "rejected"
-                else "accepted"
-            ),
+            "review_state": review_state,
             "review_required": trace["guardrail_outcome"] in {"needs_review", "rejected"},
+            "review_reason": review_reason,
+            "routing_decision": review_routing_decision(review_state),
             "error_category": trace["error_category"],
             "errors": validation_errors or [],
+        },
+        "guardrail": {
+            "outcome": trace["guardrail_outcome"],
+            "reason": review_reason,
+            "error_category": trace["error_category"],
+        },
+        "review": {
+            "state": review_state,
+            "required": trace["guardrail_outcome"] in {"needs_review", "rejected"},
+            "reason": review_reason,
+            "routing_decision": review_routing_decision(review_state),
+            "queue_hint": (
+                "Show this run in review queues before downstream automation."
+                if review_state in {"needs_review", "rejected"}
+                else "No review queue item required."
+            ),
         },
         "output_summary": None,
         "output": None,
@@ -133,6 +155,8 @@ def build_agent_run_envelope(
     output = payload["output"]
     validation = payload["validation"]
     review_state = validation["review_state"]
+    review_reason = validation["review_reason"]
+    routing_decision = validation["routing_decision"]
     return {
         "agent_run_id": run_id,
         "agent_id": agent.agent_id,
@@ -188,6 +212,7 @@ def build_agent_run_envelope(
         },
         "guardrail": {
             "outcome": validation["guardrail_outcome"],
+            "reason": review_reason,
             "error_category": validation["error_category"],
         },
         "range_output": {
@@ -199,10 +224,11 @@ def build_agent_run_envelope(
         "review": {
             "state": review_state,
             "required": validation["review_required"],
-            "touch_decision": "allow_read_only_output"
-            if review_state == "accepted"
-            else "block_downstream_touch",
+            "reason": review_reason,
+            "routing_decision": routing_decision,
+            "touch_decision": routing_decision,
             "export_decision": "not_exported",
+            "queue_hint": payload["review"]["queue_hint"],
         },
         "eval_evidence": {
             "eval_run_id": trace["eval_run_id"],

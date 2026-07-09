@@ -55,6 +55,8 @@ def trace_domain_to_range_detail(
             "guardrails": envelope["guardrail"],
             "range": envelope["range_output"],
             "review": envelope["review"],
+            "review_reason": envelope["review"]["reason"],
+            "routing_decision": envelope["review"]["routing_decision"],
             "eval_evidence": envelope["eval_evidence"],
         },
     }
