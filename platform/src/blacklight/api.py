@@ -12,6 +12,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from blacklight.agents import AgentDefinition, AgentRegistry
+from blacklight.agents.runs import (
+    build_agent_run_envelope,
+    build_agent_run_payload,
+)
 from blacklight.errors import (
     GuardrailValidationError,
     agent_not_found_error,
@@ -90,6 +94,13 @@ class ConsoleWorkflowRunRequest(BaseModel):
     body: str = "Customer asks for a refund after duplicate billing."
     session_id: str = "console-api-demo"
     idempotency_key: str | None = None
+
+
+class AgentRunRequest(BaseModel):
+    subject: str
+    body: str
+    session_id: str | None = None
+    verbose: bool = False
 
 
 class ConsoleEvalRunRequest(BaseModel):
@@ -419,6 +430,173 @@ def _agent_profile_payload(agent: AgentDefinition) -> dict[str, Any]:
     return payload
 
 
+def _get_agent_or_404(agent_id: str) -> AgentDefinition:
+    agent = AgentRegistry().get_optional(agent_id)
+    if agent is None:
+        raise HTTPException(
+            status_code=404,
+            detail=agent_not_found_error(agent_id).as_payload()["error"],
+        )
+    return agent
+
+
+def _assert_runnable_agent(agent: AgentDefinition) -> None:
+    if agent.agent_id != "ticket_classifier_agent":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Agent run API only supports ticket_classifier_agent in this milestone: {agent.agent_id}",
+        )
+
+
+def _agent_run_cli_commands(
+    *,
+    agent_id: str,
+    subject: str,
+    body: str,
+    session_id: str | None,
+    agent_run_id: str,
+    trace_id: str,
+) -> dict[str, str]:
+    run_parts = [
+        "blacklight",
+        "agents",
+        "run",
+        agent_id,
+        "--subject",
+        _quote_cli_arg(subject),
+        "--body",
+        _quote_cli_arg(body),
+    ]
+    if session_id is not None:
+        run_parts.extend(["--session-id", _quote_cli_arg(session_id)])
+    run_parts.extend(["--trace-db-path", _quote_cli_arg(settings.trace_db_path), "--json"])
+    run_command = " ".join(run_parts)
+    return {
+        "primary": run_command,
+        "run": run_command,
+        "show": f"blacklight agents runs show {agent_run_id} {_trace_db_arg()}",
+        "trace": f"blacklight trace show {trace_id} {_trace_db_arg()}",
+        "session": f"blacklight session show {session_id or agent_run_id} {_trace_db_arg()}",
+    }
+
+
+def _agent_run_response_payload(
+    *,
+    payload: dict[str, Any],
+    envelope: dict[str, Any],
+    subject: str,
+    body: str,
+) -> dict[str, Any]:
+    agent_run_id = payload["agent_run"]["run_id"]
+    trace_id = payload["trace"]["trace_id"]
+    commands = _agent_run_cli_commands(
+        agent_id=payload["agent_run"]["agent_id"],
+        subject=subject,
+        body=body,
+        session_id=payload["agent_run"]["requested_session_id"],
+        agent_run_id=agent_run_id,
+        trace_id=trace_id,
+    )
+    response = {
+        **payload,
+        "run_id": agent_run_id,
+        "agent_run_id": agent_run_id,
+        "trace_id": trace_id,
+        "trace_envelope": envelope,
+        "links": {
+            "self": f"/api/agent-runs/{agent_run_id}",
+            "console_agent_run": f"/api/console/agent-runs/{agent_run_id}",
+            "trace": f"/api/console/traces/{trace_id}",
+            "session": f"/api/console/runs/{payload['agent_run']['session_id']}",
+            "agent": f"/api/agents/{payload['agent_run']['agent_id']}",
+        },
+        "cli_command": commands["primary"],
+        "cli_commands": commands,
+        "cli": commands,
+    }
+    response["agent_run"]["links"] = response["links"]
+    return response
+
+
+def _run_managed_agent(
+    *,
+    agent: AgentDefinition,
+    run_request: AgentRunRequest,
+) -> tuple[dict[str, Any], int]:
+    _assert_runnable_agent(agent)
+    run_id = f"agent-run-{uuid.uuid4()}"
+    requested_session_id = run_request.session_id
+    session_id = requested_session_id or run_id
+    try:
+        provider = create_provider(settings)
+    except RuntimeError as exc:
+        raise ProviderConfigurationError(str(exc)) from exc
+    run_classifier = TicketClassifier(
+        provider=provider,
+        model=settings.model,
+        trace_store=trace_store,
+        idempotency_store=idempotency_store,
+        provider_timeout_seconds=settings.provider_timeout_seconds,
+        provider_max_retries=settings.provider_max_retries,
+        provider_rate_limit_requests=settings.provider_rate_limit_requests,
+        provider_rate_limit_window_seconds=settings.provider_rate_limit_window_seconds,
+    )
+    ticket = TicketRequest(
+        subject=run_request.subject,
+        body=run_request.body,
+        session_id=session_id,
+        idempotency_key=run_id,
+        agent_run_id=run_id,
+    )
+    validation_errors: list[str] | None = None
+    result: TicketClassification | None
+    status_code = 200
+    try:
+        result = run_classifier.classify(ticket)
+    except GuardrailValidationError as exc:
+        result = None
+        validation_errors = [str(exc)]
+        status_code = 422
+    traces = trace_store.list_by_agent_run_id(run_id)
+    if not traces:
+        if validation_errors:
+            raise GuardrailValidationError("; ".join(validation_errors))
+        raise HTTPException(status_code=500, detail="Agent run did not write a trace.")
+    trace = traces[-1]
+    payload = build_agent_run_payload(
+        agent=agent,
+        run_id=run_id,
+        requested_session_id=requested_session_id,
+        session_id=session_id,
+        db_path=settings.trace_db_path,
+        result=result,
+        trace=trace,
+        verbose=run_request.verbose,
+        validation_errors=validation_errors,
+    )
+    envelope = build_agent_run_envelope(
+        agent=agent,
+        run_id=run_id,
+        session_id=session_id,
+        subject=run_request.subject,
+        body=run_request.body,
+        trace=trace,
+        payload=payload,
+    )
+    agent_run_store.insert(envelope)
+    response = _agent_run_response_payload(
+        payload=payload,
+        envelope=envelope,
+        subject=run_request.subject,
+        body=run_request.body,
+    )
+    if validation_errors:
+        response["error"] = describe_exception(
+            GuardrailValidationError("; ".join(validation_errors))
+        ).as_payload()["error"]
+    return response, status_code
+
+
 def _prompt_payload(prompt_id: str, version: int | None = None) -> dict[str, Any]:
     try:
         prompt = PromptRegistry().get(prompt_id, version=version)
@@ -456,7 +634,8 @@ def _agent_run_summary_payload(run: dict[str, Any]) -> dict[str, Any]:
     payload = {
         **run,
         "links": {
-            "api": f"/api/console/agent-runs/{agent_run_id}",
+            "api": f"/api/agent-runs/{agent_run_id}",
+            "console_api": f"/api/console/agent-runs/{agent_run_id}",
             "trace_api": f"/api/console/traces/{run['trace_request_id']}",
             "session_api": f"/api/console/runs/{run['session_id']}",
         },
@@ -476,7 +655,8 @@ def _agent_run_envelope_payload(envelope: dict[str, Any]) -> dict[str, Any]:
     payload = {
         **envelope,
         "links": {
-            "self": f"/api/console/agent-runs/{envelope['agent_run_id']}",
+            "self": f"/api/agent-runs/{envelope['agent_run_id']}",
+            "console_api": f"/api/console/agent-runs/{envelope['agent_run_id']}",
             "trace_api": f"/api/console/traces/{envelope['trace_request_id']}",
             "session_api": f"/api/console/runs/{envelope['session_id']}",
         },
@@ -1811,14 +1991,17 @@ def agents_list_json() -> dict[str, Any]:
 
 @app.get("/api/agents/{agent_id}")
 def agent_profile_json(agent_id: str) -> dict[str, Any]:
-    registry = AgentRegistry()
-    agent = registry.get_optional(agent_id)
-    if agent is None:
-        raise HTTPException(
-            status_code=404,
-            detail=agent_not_found_error(agent_id).as_payload()["error"],
-        )
-    return _agent_profile_payload(agent)
+    return _agent_profile_payload(_get_agent_or_404(agent_id))
+
+
+@app.post("/api/agents/{agent_id}/runs")
+def agent_run_json(
+    agent_id: str,
+    run_request: AgentRunRequest,
+) -> JSONResponse:
+    agent = _get_agent_or_404(agent_id)
+    payload, status_code = _run_managed_agent(agent=agent, run_request=run_request)
+    return JSONResponse(content=payload, status_code=status_code)
 
 
 @app.get("/api/console/first-run")
@@ -2012,6 +2195,11 @@ def console_agent_run_json(agent_run_id: str) -> dict[str, Any]:
         "cli_commands": agent_run["cli_commands"],
         "cli": agent_run["cli"],
     }
+
+
+@app.get("/api/agent-runs/{agent_run_id}")
+def agent_run_lookup_json(agent_run_id: str) -> dict[str, Any]:
+    return console_agent_run_json(agent_run_id)
 
 
 @app.get("/api/console/evals")
