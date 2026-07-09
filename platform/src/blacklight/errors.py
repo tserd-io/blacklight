@@ -63,7 +63,10 @@ def describe_exception(exc: Exception) -> ErrorDetail:
             category="configuration_error",
             message=str(exc),
             likely_cause="Provider settings are missing, malformed, or incompatible with the selected provider.",
-            next_step="Run `blacklight health` and check LLM_PROVIDER, OPENAI_API_KEY, or LLM_CUSTOM_PROVIDER.",
+            next_step=(
+                "Run `blacklight health` and check LLM_PROVIDER, "
+                "OPENAI_API_KEY/LLM_API_KEY/API_KEY, or LLM_CUSTOM_PROVIDER."
+            ),
         )
     if isinstance(exc, ProviderCallError):
         return ErrorDetail(

@@ -19,10 +19,23 @@ class OpenAIProvider(LLMProvider):
         idempotency_key = request.metadata.get("idempotency_key")
         if idempotency_key:
             extra_headers["Idempotency-Key"] = str(idempotency_key)
+        kwargs = {}
+        if request.output_schema:
+            kwargs["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "name": request.output_schema_name or "provider_response",
+                    "schema": request.output_schema,
+                    "strict": True,
+                }
+            }
+        elif request.output_format == "json_object":
+            kwargs["text"] = {"format": {"type": "json_object"}}
         response = self.client.responses.create(
             model=request.model,
             input=request.prompt,
             extra_headers=extra_headers or None,
+            **kwargs,
         )
         usage = getattr(response, "usage", None)
         return ProviderResponse(

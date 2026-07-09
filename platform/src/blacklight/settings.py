@@ -20,7 +20,7 @@ USER_EDITABLE_ENV_KEYS = {
     "LLM_PROVIDER_RATE_LIMIT_REQUESTS",
     "LLM_PROVIDER_RATE_LIMIT_WINDOW_SECONDS",
 }
-SECRET_ENV_KEYS = {"OPENAI_API_KEY"}
+SECRET_ENV_KEYS = {"OPENAI_API_KEY", "LLM_API_KEY", "API_KEY"}
 
 
 @dataclass(frozen=True)
@@ -105,7 +105,7 @@ def load_settings(user_env_path: str | Path | None = None) -> Settings:
         provider=_setting("LLM_PROVIDER", "mock", user_env),
         model=_setting("LLM_MODEL", "mock-ticket-classifier", user_env),
         trace_db_path=_setting("TRACE_DB_PATH", "traces.sqlite3", user_env),
-        openai_api_key=os.getenv("OPENAI_API_KEY") or None,
+        openai_api_key=_private_provider_api_key(),
         custom_provider_path=_setting("LLM_CUSTOM_PROVIDER", "", user_env) or None,
         ollama_base_url=_setting("OLLAMA_BASE_URL", "http://localhost:11434", user_env),
         provider_timeout_seconds=float(
@@ -126,6 +126,10 @@ def _setting(key: str, default: str, user_env: dict[str, str]) -> str:
     if process_value is not None:
         return process_value
     return user_env.get(key, default)
+
+
+def _private_provider_api_key() -> str | None:
+    return os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or os.getenv("API_KEY") or None
 
 
 def _quote_env_value(value: Any) -> str:

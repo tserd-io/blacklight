@@ -307,7 +307,7 @@ def providers_list(_args: argparse.Namespace) -> int:
                     "configured": bool(settings.openai_api_key),
                     "selected": settings.provider == "openai",
                     "requires_secret": True,
-                    "summary": "Uses OPENAI_API_KEY from private environment settings.",
+                    "summary": "Uses OPENAI_API_KEY, LLM_API_KEY, or API_KEY from private environment settings.",
                 },
                 {
                     "name": "custom",
@@ -342,7 +342,7 @@ def providers_status(_args: argparse.Namespace) -> int:
                     "message": (
                         "OpenAI provider key is configured."
                         if settings.openai_api_key
-                        else "OpenAI provider requires OPENAI_API_KEY in a private environment."
+                        else "OpenAI provider requires OPENAI_API_KEY, LLM_API_KEY, or API_KEY in a private environment."
                     ),
                 },
                 "custom": {
@@ -841,12 +841,24 @@ def trace_show(args: argparse.Namespace) -> int:
         return 1
     envelope = agent_run_store.get(trace["agent_run_id"]) if trace["agent_run_id"] else None
     detail = trace_domain_to_range_detail(trace, envelope)
-    detail["eval_evidence"] = build_eval_evidence(
-        trace,
-        trace_db_path=args.trace_db_path or settings.trace_db_path,
-    )
-    if detail["domain_to_range"]:
-        detail["domain_to_range"]["eval_evidence"] = detail["eval_evidence"]
+    if envelope:
+        eval_evidence = {
+            **envelope.get("eval_evidence", {}),
+            **build_eval_evidence(
+                trace,
+                agent_id=envelope["agent_id"],
+                workflow_id=envelope["workflow_id"],
+                trace_db_path=args.trace_db_path or settings.trace_db_path,
+            ),
+        }
+        detail["eval_evidence"] = eval_evidence
+        if detail["domain_to_range"]:
+            detail["domain_to_range"]["eval_evidence"] = eval_evidence
+    else:
+        detail["eval_evidence"] = build_eval_evidence(
+            trace,
+            trace_db_path=args.trace_db_path or settings.trace_db_path,
+        )
     _print_json({"trace": detail})
     return 0
 

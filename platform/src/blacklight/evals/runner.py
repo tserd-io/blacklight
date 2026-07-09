@@ -10,7 +10,12 @@ from statistics import median
 
 from blacklight.evals.metrics import accuracy
 from blacklight.guardrails.validation import validate_ticket_output
-from blacklight.models import GuardrailOutcome, ProviderRequest, TraceRecord
+from blacklight.models import (
+    GuardrailOutcome,
+    ProviderRequest,
+    TraceRecord,
+    ticket_classification_output_schema,
+)
 from blacklight.observability.cost import estimate_cost
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.storage import TraceStore
@@ -81,6 +86,9 @@ def run_ticket_classification_eval(
                 ProviderRequest(
                     prompt=prompt,
                     model=model,
+                    output_format="json_object",
+                    output_schema_name="ticket_classification",
+                    output_schema=ticket_classification_output_schema(),
                     metadata={
                         "request_id": trace_request_id,
                         "session_id": session_id,

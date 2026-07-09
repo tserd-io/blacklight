@@ -3,6 +3,7 @@ import json
 from blacklight.models import ProviderRequest
 from blacklight.providers.mock import MockProvider
 from blacklight.providers.ollama_provider import OllamaProvider
+from blacklight.providers.openai_provider import OpenAIProvider
 
 
 def test_mock_provider_returns_normalized_ticket_json():
@@ -68,6 +69,108 @@ def test_ollama_provider_normalizes_generate_response(monkeypatch):
     assert response.input_tokens == 12
     assert response.output_tokens == 4
     assert response.metadata["base_url"] == "http://localhost:11434"
+
+
+def test_ollama_provider_maps_json_output_format(monkeypatch):
+    captured = {}
+
+    class FakeHTTPResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return json.dumps({"model": "llama3.1", "response": "{}"}).encode("utf-8")
+
+    def fake_urlopen(http_request, timeout):
+        captured["body"] = json.loads(http_request.data.decode("utf-8"))
+        return FakeHTTPResponse()
+
+    monkeypatch.setattr("blacklight.providers.ollama_provider.urlrequest.urlopen", fake_urlopen)
+
+    OllamaProvider(base_url="http://localhost:11434/").complete(
+        ProviderRequest(
+            prompt="Classify this ticket.",
+            model="llama3.1",
+            output_format="json_object",
+        )
+    )
+
+    assert captured["body"]["format"] == "json"
+
+
+def test_openai_provider_maps_json_output_format():
+    captured = {}
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+
+            class FakeResponse:
+                output_text = "{}"
+                usage = None
+                id = "response-1"
+
+            return FakeResponse()
+
+    provider = OpenAIProvider.__new__(OpenAIProvider)
+    provider.client = type("FakeClient", (), {"responses": FakeResponses()})()
+
+    response = provider.complete(
+        ProviderRequest(
+            prompt="Classify this ticket.",
+            model="gpt-4o-mini",
+            output_format="json_object",
+        )
+    )
+
+    assert captured["text"] == {"format": {"type": "json_object"}}
+    assert response.text == "{}"
+
+
+def test_openai_provider_prefers_output_schema_over_json_object():
+    captured = {}
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["category"],
+        "properties": {"category": {"type": "string", "enum": ["billing"]}},
+    }
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+
+            class FakeResponse:
+                output_text = '{"category":"billing"}'
+                usage = None
+                id = "response-1"
+
+            return FakeResponse()
+
+    provider = OpenAIProvider.__new__(OpenAIProvider)
+    provider.client = type("FakeClient", (), {"responses": FakeResponses()})()
+
+    provider.complete(
+        ProviderRequest(
+            prompt="Classify this ticket.",
+            model="gpt-4o-mini",
+            output_format="json_object",
+            output_schema_name="ticket_classification",
+            output_schema=schema,
+        )
+    )
+
+    assert captured["text"] == {
+        "format": {
+            "type": "json_schema",
+            "name": "ticket_classification",
+            "schema": schema,
+            "strict": True,
+        }
+    }
 
 
 def test_ollama_provider_reads_base_url_from_user_env(monkeypatch, tmp_path):

@@ -77,12 +77,24 @@ def test_private_provider_key_is_loaded_only_from_process_env(monkeypatch, tmp_p
     user_env_path = tmp_path / "user.env"
     user_env_path.write_text("OPENAI_API_KEY=sk-user-env-secret\n", encoding="utf-8")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("API_KEY", raising=False)
 
     assert load_settings(user_env_path).openai_api_key is None
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-private-process-secret")
 
     assert load_settings(user_env_path).openai_api_key == "sk-private-process-secret"
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "sk-generic-llm-secret")
+
+    assert load_settings(user_env_path).openai_api_key == "sk-generic-llm-secret"
+
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("API_KEY", "sk-generic-secret")
+
+    assert load_settings(user_env_path).openai_api_key == "sk-generic-secret"
 
 
 def test_write_user_env_preserves_private_unknown_lines_and_rejects_unknown_settings(tmp_path):
@@ -111,6 +123,9 @@ def test_write_user_env_preserves_private_unknown_lines_and_rejects_unknown_sett
 
     with pytest.raises(ValueError, match="Unsupported user.env setting"):
         write_user_env({"OPENAI_API_KEY": "sk-secret"}, user_env_path)
+
+    with pytest.raises(ValueError, match="Unsupported user.env setting"):
+        write_user_env({"API_KEY": "sk-secret"}, user_env_path)
 
 
 def test_write_user_env_removes_keys_with_none_value(tmp_path):

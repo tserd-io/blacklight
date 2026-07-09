@@ -9,13 +9,16 @@ from blacklight.providers.mock import MockProvider
 from blacklight.settings import Settings, load_settings
 
 
-SMOKE_PROMPT = "Classify this synthetic support ticket: duplicate billing after renewal."
+SMOKE_PROMPT = (
+    "Return JSON for this synthetic support ticket classification: duplicate billing after renewal."
+)
 
 
 def _request(model: str) -> ProviderRequest:
     return ProviderRequest(
         prompt=SMOKE_PROMPT,
         model=model,
+        output_format="json_object",
         metadata={"idempotency_key": "provider-configuration-smoke"},
     )
 
@@ -43,15 +46,18 @@ def test_mock_provider_configuration_smoke_runs_in_default_ci(monkeypatch):
 def test_openai_provider_configuration_smoke_is_opt_in():
     _skip_unless_enabled(
         "RUN_OPENAI_PROVIDER_SMOKE",
-        "Requires OPENAI_API_KEY and an OpenAI model in LLM_MODEL.",
+        "Requires OPENAI_API_KEY, LLM_API_KEY, or API_KEY and an OpenAI model in LLM_MODEL.",
     )
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY is required for the OpenAI provider smoke test.")
+    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or os.getenv("API_KEY")
+    if not api_key:
+        pytest.skip(
+            "OPENAI_API_KEY, LLM_API_KEY, or API_KEY is required for the OpenAI provider smoke test."
+        )
 
     settings = Settings(
         provider="openai",
         model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
-        openai_api_key=os.environ["OPENAI_API_KEY"],
+        openai_api_key=api_key,
     )
     response = create_provider(settings).complete(_request(settings.model))
 

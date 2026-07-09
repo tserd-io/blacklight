@@ -8,7 +8,7 @@ from blacklight.agents import AgentRegistry
 from blacklight.agents.runs import build_agent_run_envelope, build_agent_run_payload
 from blacklight.evals.runner import run_ticket_classification_eval
 from blacklight.guardrails.validation import validate_ticket_output
-from blacklight.models import ProviderRequest, TraceRecord
+from blacklight.models import ProviderRequest, TraceRecord, ticket_classification_output_schema
 from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.cost import estimate_cost
 from blacklight.observability.evaluations import EvalMetricStore
@@ -108,6 +108,9 @@ def _seed_ticket_run(
         ProviderRequest(
             prompt=rendered_prompt,
             model=DEMO_SEED_MODEL,
+            output_format="json_object",
+            output_schema_name="ticket_classification",
+            output_schema=ticket_classification_output_schema(),
             metadata={
                 "request_id": sample["trace_request_id"],
                 "session_id": DEMO_SEED_SESSION_ID,

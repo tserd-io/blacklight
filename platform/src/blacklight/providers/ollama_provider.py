@@ -22,12 +22,15 @@ class OllamaProvider(LLMProvider):
         ).rstrip("/")
 
     def complete(self, request: ProviderRequest) -> ProviderResponse:
+        request_body = {
+            "model": request.model,
+            "prompt": request.prompt,
+            "stream": False,
+        }
+        if request.output_format == "json_object":
+            request_body["format"] = "json"
         payload = json.dumps(
-            {
-                "model": request.model,
-                "prompt": request.prompt,
-                "stream": False,
-            }
+            request_body
         ).encode("utf-8")
         http_request = urlrequest.Request(
             f"{self.base_url}/api/generate",

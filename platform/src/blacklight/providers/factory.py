@@ -23,7 +23,7 @@ def create_provider(settings: Settings | None = None) -> LLMProvider:
     if provider_name == "openai":
         if not resolved_settings.openai_api_key:
             raise ProviderConfigurationError(
-                "OPENAI_API_KEY is required when LLM_PROVIDER is set to openai."
+                "OPENAI_API_KEY, LLM_API_KEY, or API_KEY is required when LLM_PROVIDER is set to openai."
             )
         from blacklight.providers.openai_provider import OpenAIProvider
 
