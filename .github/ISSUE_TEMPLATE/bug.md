@@ -3,7 +3,8 @@ name: Bug template
 about: Report broken, confusing, or inconsistent behavior.
 title: "[Bug]: "
 labels: bug
-assignees: ""
+assignees: ''
+
 ---
 
 ## Summary

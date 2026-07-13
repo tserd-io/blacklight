@@ -3,7 +3,8 @@ name: Feature template
 about: Propose a focused Blacklight feature or product improvement.
 title: "[Feature]: "
 labels: enhancement
-assignees: ""
+assignees: ''
+
 ---
 
 ## Outcome

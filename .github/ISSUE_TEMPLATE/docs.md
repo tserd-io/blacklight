@@ -3,7 +3,8 @@ name: Docs template
 about: Improve README, guides, architecture docs, examples, or screenshots.
 title: "[Docs]: "
 labels: docs
-assignees: ""
+assignees: ''
+
 ---
 
 ## Audience
