@@ -11,6 +11,8 @@ DEFAULT_USER_ENV_PATH = "user.env"
 
 USER_EDITABLE_ENV_KEYS = {
     "LLM_PROVIDER",
+    "LLM_PROVIDER_ADAPTER",
+    "LLM_PROVIDER_NAME",
     "LLM_MODEL",
     "TRACE_DB_PATH",
     "LLM_CUSTOM_PROVIDER",
@@ -26,6 +28,8 @@ SECRET_ENV_KEYS = {"OPENAI_API_KEY", "LLM_API_KEY", "API_KEY"}
 @dataclass(frozen=True)
 class Settings:
     provider: str = "mock"
+    provider_adapter: str | None = None
+    provider_name: str | None = None
     model: str = "mock-ticket-classifier"
     trace_db_path: str = "traces.sqlite3"
     openai_api_key: str | None = None
@@ -101,8 +105,16 @@ def write_user_env(
 
 def load_settings(user_env_path: str | Path | None = None) -> Settings:
     user_env = load_user_env(user_env_path)
+    provider = _setting("LLM_PROVIDER", "mock", user_env).strip().lower()
+    provider_adapter = _setting("LLM_PROVIDER_ADAPTER", "", user_env).strip().lower() or None
+    provider_name = (
+        _setting("LLM_PROVIDER_NAME", "", user_env).strip()
+        or _default_provider_name(provider, provider_adapter)
+    )
     return Settings(
-        provider=_setting("LLM_PROVIDER", "mock", user_env),
+        provider=provider,
+        provider_adapter=provider_adapter,
+        provider_name=provider_name,
         model=_setting("LLM_MODEL", "mock-ticket-classifier", user_env),
         trace_db_path=_setting("TRACE_DB_PATH", "traces.sqlite3", user_env),
         openai_api_key=_private_provider_api_key(),
@@ -119,6 +131,14 @@ def load_settings(user_env_path: str | Path | None = None) -> Settings:
             _setting("LLM_PROVIDER_RATE_LIMIT_WINDOW_SECONDS", "10", user_env)
         ),
     )
+
+
+def _default_provider_name(provider: str, provider_adapter: str | None) -> str:
+    if provider == "mock":
+        return "mock"
+    if provider == "injected":
+        return provider_adapter or "injected"
+    return provider
 
 
 def _setting(key: str, default: str, user_env: dict[str, str]) -> str:

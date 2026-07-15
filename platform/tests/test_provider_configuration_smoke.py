@@ -55,7 +55,8 @@ def test_openai_provider_configuration_smoke_is_opt_in():
         )
 
     settings = Settings(
-        provider="openai",
+        provider="injected",
+        provider_adapter="openai",
         model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
         openai_api_key=api_key,
     )
@@ -76,7 +77,8 @@ def test_custom_provider_configuration_smoke_is_opt_in():
         pytest.skip("LLM_CUSTOM_PROVIDER is required for the custom provider smoke test.")
 
     settings = Settings(
-        provider="custom",
+        provider="injected",
+        provider_adapter="custom",
         model=os.getenv("LLM_MODEL", "custom-smoke-model"),
         custom_provider_path=custom_provider_path,
     )
@@ -98,7 +100,8 @@ def test_local_endpoint_provider_configuration_smoke_is_opt_in():
         pytest.skip("LLM_CUSTOM_PROVIDER is required for the local endpoint smoke test.")
 
     settings = Settings(
-        provider="custom",
+        provider="injected",
+        provider_adapter="custom",
         model=os.getenv("LLM_MODEL", "local-smoke-model"),
         custom_provider_path=custom_provider_path,
     )
@@ -117,7 +120,8 @@ def test_ollama_provider_configuration_smoke_is_opt_in():
     )
 
     settings = Settings(
-        provider="custom",
+        provider="injected",
+        provider_adapter="custom",
         model=os.getenv("LLM_MODEL", "llama3.1"),
         custom_provider_path="blacklight.providers.ollama_provider:OllamaProvider",
     )

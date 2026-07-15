@@ -22,7 +22,9 @@ def test_settings_load_from_user_env_when_process_env_is_absent(monkeypatch, tmp
     user_env_path.write_text(
         "\n".join(
             [
-                "LLM_PROVIDER=custom",
+                "LLM_PROVIDER=injected",
+                "LLM_PROVIDER_ADAPTER=custom",
+                "LLM_PROVIDER_NAME=local-http",
                 "LLM_MODEL=local-model",
                 "TRACE_DB_PATH=local.sqlite3",
                 "LLM_CUSTOM_PROVIDER=my_package.providers:Provider",
@@ -37,6 +39,8 @@ def test_settings_load_from_user_env_when_process_env_is_absent(monkeypatch, tmp
     )
     for key in [
         "LLM_PROVIDER",
+        "LLM_PROVIDER_ADAPTER",
+        "LLM_PROVIDER_NAME",
         "LLM_MODEL",
         "TRACE_DB_PATH",
         "LLM_CUSTOM_PROVIDER",
@@ -50,7 +54,9 @@ def test_settings_load_from_user_env_when_process_env_is_absent(monkeypatch, tmp
 
     settings = load_settings(user_env_path)
 
-    assert settings.provider == "custom"
+    assert settings.provider == "injected"
+    assert settings.provider_adapter == "custom"
+    assert settings.provider_name == "local-http"
     assert settings.model == "local-model"
     assert settings.trace_db_path == "local.sqlite3"
     assert settings.custom_provider_path == "my_package.providers:Provider"
@@ -61,9 +67,40 @@ def test_settings_load_from_user_env_when_process_env_is_absent(monkeypatch, tmp
     assert settings.provider_rate_limit_window_seconds == 30
 
 
+def test_settings_default_provider_name_is_mock(monkeypatch):
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER_ADAPTER", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER_NAME", raising=False)
+
+    settings = load_settings()
+
+    assert settings.provider == "mock"
+    assert settings.provider_name == "mock"
+
+
+def test_settings_defaults_injected_provider_name_to_adapter(monkeypatch, tmp_path):
+    user_env_path = tmp_path / "user.env"
+    user_env_path.write_text(
+        "LLM_PROVIDER=injected\nLLM_PROVIDER_ADAPTER=custom\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER_ADAPTER", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER_NAME", raising=False)
+
+    settings = load_settings(user_env_path)
+
+    assert settings.provider == "injected"
+    assert settings.provider_adapter == "custom"
+    assert settings.provider_name == "custom"
+
+
 def test_process_env_takes_precedence_over_user_env(monkeypatch, tmp_path):
     user_env_path = tmp_path / "user.env"
-    user_env_path.write_text("LLM_PROVIDER=custom\nLLM_MODEL=user-env-model\n", encoding="utf-8")
+    user_env_path.write_text(
+        "LLM_PROVIDER=injected\nLLM_PROVIDER_ADAPTER=custom\nLLM_MODEL=user-env-model\n",
+        encoding="utf-8",
+    )
     monkeypatch.setenv("LLM_PROVIDER", "mock")
     monkeypatch.setenv("LLM_MODEL", "process-env-model")
 
@@ -106,14 +143,18 @@ def test_write_user_env_preserves_private_unknown_lines_and_rejects_unknown_sett
 
     values = write_user_env(
         {
-            "LLM_PROVIDER": "openai",
+            "LLM_PROVIDER": "injected",
+            "LLM_PROVIDER_ADAPTER": "openai",
+            "LLM_PROVIDER_NAME": "openai",
             "OLLAMA_BASE_URL": "http://localhost:11434",
         },
         user_env_path,
     )
     written = user_env_path.read_text(encoding="utf-8")
 
-    assert values["LLM_PROVIDER"] == "openai"
+    assert values["LLM_PROVIDER"] == "injected"
+    assert values["LLM_PROVIDER_ADAPTER"] == "openai"
+    assert values["LLM_PROVIDER_NAME"] == "openai"
     assert values["OLLAMA_BASE_URL"] == "http://localhost:11434"
     assert "PRIVATE_OPERATOR_VALUE=leave-me-alone" in written
     assert "OLLAMA_BASE_URL=http://localhost:11434" in written

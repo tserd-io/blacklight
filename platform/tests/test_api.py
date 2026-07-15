@@ -568,7 +568,8 @@ def test_console_agent_run_uses_mock_demo_even_when_live_provider_is_unconfigure
         "settings",
         replace(
             api.settings,
-            provider="openai",
+            provider="injected",
+            provider_adapter="openai",
             openai_api_key=None,
             trace_db_path=trace_db_path,
         ),
@@ -773,6 +774,14 @@ def test_console_api_surfaces_return_state_and_cli(monkeypatch, tmp_path):
         assert payload["cli_command"] == payload["cli_commands"]["primary"]
         _assert_cli_command_parseable(payload["cli_command"])
 
+    providers_response = client.get("/api/console/providers")
+    providers_payload = providers_response.json()
+    assert [provider["provider"] for provider in providers_payload["providers"]] == [
+        "mock",
+        "hosted",
+        "custom",
+    ]
+
 
 def test_console_api_eval_run_uses_mock_mode_and_persists_links(monkeypatch, tmp_path):
     _trace_store, eval_store, _review_store = _patch_seeded_console_stores(monkeypatch, tmp_path)
@@ -808,11 +817,11 @@ def test_console_api_eval_run_uses_mock_mode_and_persists_links(monkeypatch, tmp
 def test_console_api_provider_test_does_not_require_live_keys(monkeypatch, tmp_path):
     _patch_seeded_console_stores(monkeypatch, tmp_path)
 
-    response = TestClient(api.app).post("/api/console/providers/openai/test")
+    response = TestClient(api.app).post("/api/console/providers/hosted/test")
     payload = response.json()
 
     assert response.status_code == 200
-    assert payload["provider"]["provider"] == "openai"
+    assert payload["provider"]["provider"] == "hosted"
     assert payload["test"]["live_call_performed"] is False
     assert payload["test"]["status"] == "not_configured"
     assert payload["cli_command"] == "blacklight health"
@@ -868,6 +877,8 @@ def test_console_settings_update_writes_user_env_without_editing_private_keys(
     monkeypatch.setenv("BLACKLIGHT_USER_ENV_PATH", str(user_env_path))
     for key in [
         "LLM_PROVIDER",
+        "LLM_PROVIDER_ADAPTER",
+        "LLM_PROVIDER_NAME",
         "LLM_MODEL",
         "TRACE_DB_PATH",
         "LLM_CUSTOM_PROVIDER",
@@ -880,7 +891,9 @@ def test_console_settings_update_writes_user_env_without_editing_private_keys(
             "/api/console/settings",
             json={
                 "settings": {
-                    "LLM_PROVIDER": "openai",
+                    "LLM_PROVIDER": "injected",
+                    "LLM_PROVIDER_ADAPTER": "openai",
+                    "LLM_PROVIDER_NAME": "openai",
                     "LLM_MODEL": "gpt-4o-mini",
                     "TRACE_DB_PATH": str(tmp_path / "updated.sqlite3"),
                 }
@@ -903,9 +916,11 @@ def test_console_settings_update_writes_user_env_without_editing_private_keys(
     assert payload["updated_keys"] == [
         "LLM_MODEL",
         "LLM_PROVIDER",
+        "LLM_PROVIDER_ADAPTER",
+        "LLM_PROVIDER_NAME",
         "TRACE_DB_PATH",
     ]
-    assert payload["settings"]["openai_configured"] is True
+    assert payload["settings"]["provider_key_configured"] is True
     assert "OPENAI_API_KEY" not in payload["settings"]["user_env"]["managed_keys"]
     assert "sk-private-process-secret" not in str(payload)
     assert "PRIVATE_NOTE=keep" in written
@@ -972,7 +987,8 @@ def test_console_settings_update_keeps_api_available_when_provider_extra_is_miss
             "/api/console/settings",
             json={
                 "settings": {
-                    "LLM_PROVIDER": "openai",
+                    "LLM_PROVIDER": "injected",
+                    "LLM_PROVIDER_ADAPTER": "openai",
                 }
             },
         )
@@ -990,7 +1006,8 @@ def test_console_settings_update_keeps_api_available_when_provider_extra_is_miss
         ) = original_state
 
     assert response.status_code == 200
-    assert payload["settings"]["provider"] == "openai"
+    assert payload["settings"]["provider"] == "injected"
+    assert payload["settings"]["provider_adapter"] == "openai"
     assert startup_error is not None
     assert "openai extra" in str(startup_error)
 
@@ -1064,9 +1081,13 @@ def test_console_first_run_save_writes_local_model_settings_without_secrets(
         "LLM_CUSTOM_PROVIDER",
         "LLM_MODEL",
         "LLM_PROVIDER",
+        "LLM_PROVIDER_ADAPTER",
+        "LLM_PROVIDER_NAME",
         "OLLAMA_BASE_URL",
     ]
-    assert "LLM_PROVIDER=custom" in written
+    assert "LLM_PROVIDER=injected" in written
+    assert "LLM_PROVIDER_ADAPTER=custom" in written
+    assert "LLM_PROVIDER_NAME=ollama" in written
     assert "LLM_CUSTOM_PROVIDER=blacklight.providers.ollama_provider:OllamaProvider" in written
     assert "OPENAI_API_KEY" not in written
 
@@ -1349,7 +1370,8 @@ def test_classify_endpoint_returns_structured_configuration_errors():
 
 
 def test_api_import_keeps_app_available_when_provider_configuration_fails(monkeypatch):
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_PROVIDER", "injected")
+    monkeypatch.setenv("LLM_PROVIDER_ADAPTER", "openai")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     try:
@@ -1360,6 +1382,7 @@ def test_api_import_keeps_app_available_when_provider_configuration_fails(monkey
         )
     finally:
         monkeypatch.setenv("LLM_PROVIDER", "mock")
+        monkeypatch.delenv("LLM_PROVIDER_ADAPTER", raising=False)
         importlib.reload(api)
 
     payload = response.json()

@@ -64,7 +64,8 @@ def local_model_status(settings: Settings, timeout_seconds: float = 0.5) -> Loca
     base_url = (os.getenv("OLLAMA_BASE_URL") or settings.ollama_base_url).rstrip("/")
     provider_path = settings.custom_provider_path or OLLAMA_PROVIDER_PATH
     selected = (
-        settings.provider == "custom"
+        settings.provider == "injected"
+        and settings.provider_adapter == "custom"
         and bool(settings.custom_provider_path)
         and "ollama_provider" in settings.custom_provider_path
     )
@@ -79,12 +80,12 @@ def local_model_status(settings: Settings, timeout_seconds: float = 0.5) -> Loca
     }
     hosted_provider = {
         "configured": bool(settings.openai_api_key),
-        "provider": "openai" if settings.openai_api_key else None,
+        "provider": "hosted" if settings.openai_api_key else None,
         "secret_source": "private_environment",
         "message": (
-            "Hosted provider credentials are configured privately."
+            "Configured hosted adapter credentials are available privately."
             if settings.openai_api_key
-            else "Hosted provider credentials are not configured. Keep API keys in private environment settings, not app-editable user.env."
+            else "Hosted adapter credentials are not configured. Keep API keys in private environment settings, not app-editable user.env."
         ),
     }
     tradeoffs = {
@@ -125,7 +126,8 @@ def local_model_status(settings: Settings, timeout_seconds: float = 0.5) -> Loca
     if ready and not selected:
         status_message = (
             f"Local fallback model {model} is installed and ready. "
-            f"Set LLM_PROVIDER=custom and LLM_CUSTOM_PROVIDER={OLLAMA_PROVIDER_PATH} to make it active."
+            "Set LLM_PROVIDER=injected, LLM_PROVIDER_ADAPTER=custom, "
+            f"and LLM_CUSTOM_PROVIDER={OLLAMA_PROVIDER_PATH} to make it active."
         )
     return LocalModelStatus(
         runtime=runtime,

@@ -277,10 +277,12 @@ def health(_args: argparse.Namespace) -> int:
 def _health_payload(settings: Any) -> dict[str, Any]:
     return {
         "provider": settings.provider,
+        "provider_adapter": settings.provider_adapter,
+        "provider_name": settings.provider_name,
         "model": settings.model,
         "trace_db_path": settings.trace_db_path,
-        "openai_configured": bool(settings.openai_api_key),
-        "custom_provider_configured": bool(settings.custom_provider_path),
+        "provider_key_configured": bool(settings.openai_api_key),
+        "custom_adapter_configured": bool(settings.custom_provider_path),
         "ollama_base_url": settings.ollama_base_url,
         "provider_timeout_seconds": settings.provider_timeout_seconds,
         "provider_max_retries": settings.provider_max_retries,
@@ -300,21 +302,27 @@ def providers_list(_args: argparse.Namespace) -> int:
                     "configured": True,
                     "selected": settings.provider == "mock",
                     "requires_secret": False,
-                    "summary": "Ready by default for demos, tests, and CI.",
+                    "summary": "Deterministic demo mode for learning features, tests, and CI.",
                 },
                 {
-                    "name": "openai",
+                    "name": "hosted",
                     "configured": bool(settings.openai_api_key),
-                    "selected": settings.provider == "openai",
+                    "selected": (
+                        settings.provider == "injected"
+                        and settings.provider_adapter == "openai"
+                    ),
                     "requires_secret": True,
-                    "summary": "Uses OPENAI_API_KEY, LLM_API_KEY, or API_KEY from private environment settings.",
+                    "summary": "Injected hosted adapter example using a private provider key.",
                 },
                 {
                     "name": "custom",
                     "configured": bool(settings.custom_provider_path),
-                    "selected": settings.provider == "custom",
+                    "selected": (
+                        settings.provider == "injected"
+                        and settings.provider_adapter == "custom"
+                    ),
                     "requires_secret": False,
-                    "summary": "Uses LLM_CUSTOM_PROVIDER import path for user-owned providers.",
+                    "summary": "Injected adapter path for local, hosted, or private user-owned providers.",
                 },
             ],
         }
@@ -333,26 +341,32 @@ def providers_status(_args: argparse.Namespace) -> int:
                     "configured": True,
                     "ready": True,
                     "selected": settings.provider == "mock",
-                    "message": "Mock provider is ready without live credentials.",
+                    "message": "Mock demonstration mode is ready without live credentials.",
                 },
-                "openai": {
+                "hosted": {
                     "configured": bool(settings.openai_api_key),
                     "ready": bool(settings.openai_api_key),
-                    "selected": settings.provider == "openai",
+                    "selected": (
+                        settings.provider == "injected"
+                        and settings.provider_adapter == "openai"
+                    ),
                     "message": (
-                        "OpenAI provider key is configured."
+                        "Injected hosted adapter key is available."
                         if settings.openai_api_key
-                        else "OpenAI provider requires OPENAI_API_KEY, LLM_API_KEY, or API_KEY in a private environment."
+                        else "The hosted adapter requires OPENAI_API_KEY, LLM_API_KEY, or API_KEY in a private environment."
                     ),
                 },
                 "custom": {
                     "configured": bool(settings.custom_provider_path),
                     "ready": bool(settings.custom_provider_path),
-                    "selected": settings.provider == "custom",
+                    "selected": (
+                        settings.provider == "injected"
+                        and settings.provider_adapter == "custom"
+                    ),
                     "message": (
-                        "Custom provider import path is configured."
+                        "Injected provider import path is available."
                         if settings.custom_provider_path
-                        else "Custom provider requires LLM_CUSTOM_PROVIDER."
+                        else "Injected provider adapters require LLM_CUSTOM_PROVIDER."
                     ),
                 },
             },

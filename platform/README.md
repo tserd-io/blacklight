@@ -20,12 +20,13 @@ Blacklight Studio keeps those ideas small enough to read quickly while still run
 ## What To Review First
 
 - [src/blacklight/examples/ticket_classifier.py](src/blacklight/examples/ticket_classifier.py): example workflow using prompts, providers, guardrails, retries, idempotency, and traces
-- [src/blacklight/providers/factory.py](src/blacklight/providers/factory.py): mock/OpenAI/custom provider selection
-- [docs/provider-configuration.md](docs/provider-configuration.md): OpenAI, custom provider, and Ollama local-runtime configuration
+- [src/blacklight/providers/factory.py](src/blacklight/providers/factory.py): deterministic mock mode and injected provider adapters
+- [docs/provider-configuration.md](docs/provider-configuration.md): mock mode, injected provider adapters, and local-runtime configuration
 - [src/blacklight/evals/runner.py](src/blacklight/evals/runner.py): deterministic regression evals
 - [src/blacklight/observability/storage.py](src/blacklight/observability/storage.py): SQLite trace store and metrics
 - [docs/architecture.md](docs/architecture.md): component boundaries and request flow
 - [docs/managed-agents.md](docs/managed-agents.md): managed agents, domain/range contracts, and graph-readiness
+- [docs/sdk.md](docs/sdk.md): stable Python SDK construction facade
 - [docs/create-your-own-workflow.md](docs/create-your-own-workflow.md): guide for adapting the starter to a new task
 - [docs/tradeoffs.md](docs/tradeoffs.md): what is intentionally simplified
 - [docs/operational-cost-and-ownership.md](docs/operational-cost-and-ownership.md): cost and ownership model for regular live runs
@@ -36,7 +37,7 @@ Blacklight Studio keeps those ideas small enough to read quickly while still run
 ## Features
 
 - Deterministic mock provider for local development and CI
-- Optional OpenAI provider, custom provider import path, and Ollama local-runtime configuration
+- Deterministic mock mode for demos/tests, plus injected provider adapters for hosted, local, or private runtimes
 - Versioned prompt registry backed by JSON templates
 - Pydantic output validation and simple PII detection
 - Guardrail outcomes: `accepted`, `needs_review`, and `rejected`
@@ -45,6 +46,7 @@ Blacklight Studio keeps those ideas small enough to read quickly while still run
 - Persisted eval run/case metrics linked back to trace records
 - CLI commands for guided demos, classification, evals, metrics, health, prompts, and traces
 - Managed-agent inspection through CLI, API, and console surfaces, plus a governed CLI run path
+- Public `blacklight.sdk` construction facade for embedding Blacklight in Python applications
 - FastAPI surface for the ticket-classification workflow
 
 ## Quick Start
@@ -68,12 +70,32 @@ Expected default signal:
 {
   "provider": "mock",
   "model": "mock-ticket-classifier",
-  "openai_configured": false,
-  "custom_provider_configured": false
+  "provider_key_configured": false,
+  "custom_adapter_configured": false
 }
 ```
 
-The mock provider is the intended fresh-clone path. No API key is required.
+The mock provider is the intended fresh-clone path. It is not a lesser version of
+a live provider; it is the deterministic demonstration mode for learning the
+workflow, traces, evals, guardrails, and review states. No API key is required.
+
+## SDK Example
+
+Construct a no-key SDK client:
+
+```python
+from blacklight.sdk import Blacklight
+
+client = Blacklight.mock(trace_db_path="traces.sqlite3")
+
+print(client.provider_name)
+print(client.provider_source)
+print(client.model)
+print(client.trace_db_path)
+```
+
+`Blacklight.mock(...)` does not read `.env`, require OpenAI credentials, start
+Ollama, or call a live provider. See [docs/sdk.md](docs/sdk.md).
 
 Run the guided first demo:
 
@@ -342,8 +364,9 @@ flowchart LR
     Workflow --> Prompts["Prompt registry"]
     Workflow --> Gateway["Provider gateway"]
     Gateway --> Mock["Mock provider"]
-    Gateway --> OpenAI["OpenAI provider (optional)"]
-    Gateway --> Custom["Custom provider (optional)"]
+    Gateway --> Injected["Injected providers"]
+    Injected --> Hosted["Hosted adapter example"]
+    Injected --> Local["Local/private adapter example"]
     Workflow --> Guardrails["Validation + PII checks"]
     Workflow --> Traces["SQLite traces"]
     Evals["Eval runner"] --> Workflow
@@ -358,25 +381,30 @@ For local console use, copy `user.env.example` to `user.env` and put app-editabl
 
 Keep `.env` for private operator-owned values that the app should not edit. Runtime process environment variables still take precedence over `user.env`, so deployment systems, shell exports, and CI secrets can override local user settings without rewriting files.
 
-The default provider is the deterministic local mock:
+The default provider is the deterministic local mock. Use it first to explore
+Blacklight's workflow, trace, eval, guardrail, and review behavior:
 
 ```bash
 set LLM_PROVIDER=mock
 ```
 
-To use OpenAI:
+To use an injected hosted adapter such as OpenAI:
 
 ```bash
 pip install -e ".[openai]"
-set LLM_PROVIDER=openai
+set LLM_PROVIDER=injected
+set LLM_PROVIDER_ADAPTER=openai
+set LLM_PROVIDER_NAME=openai
 set OPENAI_API_KEY=...
 set LLM_MODEL=gpt-4o-mini
 ```
 
-To use your own provider:
+To use any user-owned provider adapter:
 
 ```bash
-set LLM_PROVIDER=custom
+set LLM_PROVIDER=injected
+set LLM_PROVIDER_ADAPTER=custom
+set LLM_PROVIDER_NAME=my-provider
 set LLM_CUSTOM_PROVIDER=my_package.providers:MyProvider
 set LLM_MODEL=my-model
 ```
@@ -388,7 +416,9 @@ The project is also configured for local model experiments with Ollama. Use the 
 ```bash
 docker compose -f docker-compose.ollama.yml up -d
 docker compose -f docker-compose.ollama.yml exec ollama ollama pull llama3.1
-set LLM_PROVIDER=custom
+set LLM_PROVIDER=injected
+set LLM_PROVIDER_ADAPTER=custom
+set LLM_PROVIDER_NAME=ollama
 set LLM_CUSTOM_PROVIDER=blacklight.providers.ollama_provider:OllamaProvider
 set LLM_MODEL=llama3.1
 set OLLAMA_BASE_URL=http://localhost:11434

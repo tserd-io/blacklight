@@ -10,36 +10,46 @@ from blacklight.settings import Settings, load_settings
 
 
 class ProviderConfigurationError(ValueError):
-    """Raised when provider settings cannot produce a configured provider."""
+    """Raised when provider settings cannot produce a provider."""
 
 
 def create_provider(settings: Settings | None = None) -> LLMProvider:
     resolved_settings = settings or load_settings()
-    provider_name = resolved_settings.provider.strip().lower()
+    provider_mode = resolved_settings.provider.strip().lower()
 
-    if provider_name == "mock":
+    if provider_mode == "mock":
         return MockProvider()
 
-    if provider_name == "openai":
+    if provider_mode != "injected":
+        raise ProviderConfigurationError(
+            f"Unsupported LLM_PROVIDER={resolved_settings.provider!r}. "
+            "Supported provider modes are: mock, injected."
+        )
+
+    adapter_name = (resolved_settings.provider_adapter or "").strip().lower()
+
+    if adapter_name == "openai":
         if not resolved_settings.openai_api_key:
             raise ProviderConfigurationError(
-                "OPENAI_API_KEY, LLM_API_KEY, or API_KEY is required when LLM_PROVIDER is set to openai."
+                "OPENAI_API_KEY, LLM_API_KEY, or API_KEY is required when "
+                "LLM_PROVIDER=injected and LLM_PROVIDER_ADAPTER=openai."
             )
         from blacklight.providers.openai_provider import OpenAIProvider
 
         return OpenAIProvider(api_key=resolved_settings.openai_api_key)
 
-    if provider_name == "custom":
+    if adapter_name == "custom":
         if not resolved_settings.custom_provider_path:
             raise ProviderConfigurationError(
-                "LLM_CUSTOM_PROVIDER is required when LLM_PROVIDER is set to custom. "
+                "LLM_CUSTOM_PROVIDER is required when LLM_PROVIDER=injected "
+                "and LLM_PROVIDER_ADAPTER=custom. "
                 "Use an import path like 'my_package.providers:MyProvider'."
             )
         return _load_custom_provider(resolved_settings.custom_provider_path)
 
     raise ProviderConfigurationError(
-        f"Unsupported LLM_PROVIDER={resolved_settings.provider!r}. "
-        "Supported providers are: mock, openai, custom."
+        f"Unsupported LLM_PROVIDER_ADAPTER={resolved_settings.provider_adapter!r}. "
+        "Supported injected adapters are: openai, custom."
     )
 
 
