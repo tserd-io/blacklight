@@ -1,12 +1,24 @@
 # Provider Configuration
 
-The provider factory supports three paths:
+Blacklight has one safe default and an injected-provider path:
 
-- `mock` for deterministic local development and CI.
-- `openai` for the optional built-in OpenAI adapter.
-- `custom` for user-owned adapters loaded from an import path.
+- `mock` is deterministic local demonstration mode for development, tests, CI,
+  docs, and first-run product tours.
+- injected providers connect Blacklight to a hosted, local, or private model
+  runtime when the user is ready to leave mock mode.
 
-The custom path is the recommended way to try local LLM runtimes without adding runtime-specific dependencies to this starter project.
+Injected providers use `LLM_PROVIDER=injected` and
+`LLM_PROVIDER_ADAPTER=<adapter>`. The built-in OpenAI adapter uses
+`LLM_PROVIDER_ADAPTER=openai`; user-owned adapters loaded from an import path
+use `LLM_PROVIDER_ADAPTER=custom`. OpenAI is an adapter example, not the center
+of the architecture. The custom path is the recommended way to try local LLM
+runtimes without adding runtime-specific dependencies to this starter project.
+
+Provider names should identify what actually ran, such as `mock`, `openai`,
+`ollama`, `lm-studio`, or a private gateway name. Configuration values such as
+`mock` and `injected` explain the provider mode. Adapter values such as
+`openai` and `custom` explain how Blacklight constructs the injected provider.
+Keeping those concepts separate makes SDK and trace output easier to understand.
 
 ## Custom Provider Contract
 
@@ -31,7 +43,9 @@ class MyProvider(LLMProvider):
 Then configure the import path:
 
 ```bash
-set LLM_PROVIDER=custom
+set LLM_PROVIDER=injected
+set LLM_PROVIDER_ADAPTER=custom
+set LLM_PROVIDER_NAME=my-provider
 set LLM_CUSTOM_PROVIDER=my_project.providers:MyProvider
 ```
 
@@ -83,7 +97,9 @@ class LocalHTTPProvider(LLMProvider):
 Configure it like this:
 
 ```bash
-set LLM_PROVIDER=custom
+set LLM_PROVIDER=injected
+set LLM_PROVIDER_ADAPTER=custom
+set LLM_PROVIDER_NAME=local-http
 set LLM_MODEL=llama3.1
 set LLM_CUSTOM_PROVIDER=my_project.local_provider:LocalHTTPProvider
 ```
@@ -171,7 +187,8 @@ docker compose -f docker-compose.ollama.yml exec ollama ollama pull llama3.1
 Point the platform at the bundled Ollama adapter:
 
 ```bash
-set LLM_PROVIDER=custom
+set LLM_PROVIDER=injected
+set LLM_PROVIDER_ADAPTER=custom
 set LLM_CUSTOM_PROVIDER=blacklight.providers.ollama_provider:OllamaProvider
 set LLM_MODEL=llama3.1
 set OLLAMA_BASE_URL=http://localhost:11434

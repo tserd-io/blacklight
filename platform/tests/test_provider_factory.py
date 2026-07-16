@@ -21,7 +21,9 @@ def test_provider_factory_rejects_unknown_provider():
 
 def test_provider_factory_requires_openai_api_key():
     with pytest.raises(ProviderConfigurationError, match="OPENAI_API_KEY"):
-        create_provider(Settings(provider="openai", openai_api_key=None))
+        create_provider(
+            Settings(provider="injected", provider_adapter="openai", openai_api_key=None)
+        )
 
 
 def test_provider_factory_creates_custom_provider_from_import_path(tmp_path, monkeypatch):
@@ -43,7 +45,11 @@ class CustomProvider(LLMProvider):
     monkeypatch.syspath_prepend(str(tmp_path))
 
     provider = create_provider(
-        Settings(provider="custom", custom_provider_path="custom_provider:CustomProvider")
+        Settings(
+            provider="injected",
+            provider_adapter="custom",
+            custom_provider_path="custom_provider:CustomProvider",
+        )
     )
 
     assert isinstance(provider, LLMProvider)
@@ -73,7 +79,11 @@ def build_provider():
     monkeypatch.syspath_prepend(str(tmp_path))
 
     provider = create_provider(
-        Settings(provider="custom", custom_provider_path="custom_factory:build_provider")
+        Settings(
+            provider="injected",
+            provider_adapter="custom",
+            custom_provider_path="custom_factory:build_provider",
+        )
     )
 
     response = provider.complete(ProviderRequest(prompt="hello", model="custom-model"))
@@ -103,7 +113,11 @@ provider = CustomProvider()
     monkeypatch.syspath_prepend(str(tmp_path))
 
     provider = create_provider(
-        Settings(provider="custom", custom_provider_path="custom_instance:provider")
+        Settings(
+            provider="injected",
+            provider_adapter="custom",
+            custom_provider_path="custom_instance:provider",
+        )
     )
 
     assert isinstance(provider, LLMProvider)
@@ -112,17 +126,29 @@ provider = CustomProvider()
 
 def test_provider_factory_requires_custom_provider_path():
     with pytest.raises(ProviderConfigurationError, match="LLM_CUSTOM_PROVIDER"):
-        create_provider(Settings(provider="custom"))
+        create_provider(Settings(provider="injected", provider_adapter="custom"))
 
 
 def test_provider_factory_rejects_malformed_custom_provider_path():
     with pytest.raises(ProviderConfigurationError, match="module:attribute"):
-        create_provider(Settings(provider="custom", custom_provider_path="bad.path"))
+        create_provider(
+            Settings(
+                provider="injected",
+                provider_adapter="custom",
+                custom_provider_path="bad.path",
+            )
+        )
 
 
 def test_provider_factory_rejects_missing_custom_provider_module():
     with pytest.raises(ProviderConfigurationError, match="Could not import"):
-        create_provider(Settings(provider="custom", custom_provider_path="missing_module:Provider"))
+        create_provider(
+            Settings(
+                provider="injected",
+                provider_adapter="custom",
+                custom_provider_path="missing_module:Provider",
+            )
+        )
 
 
 def test_provider_factory_rejects_missing_custom_provider_attribute(tmp_path, monkeypatch):
@@ -131,7 +157,13 @@ def test_provider_factory_rejects_missing_custom_provider_attribute(tmp_path, mo
     monkeypatch.syspath_prepend(str(tmp_path))
 
     with pytest.raises(ProviderConfigurationError, match="was not found"):
-        create_provider(Settings(provider="custom", custom_provider_path="empty_provider:Provider"))
+        create_provider(
+            Settings(
+                provider="injected",
+                provider_adapter="custom",
+                custom_provider_path="empty_provider:Provider",
+            )
+        )
 
 
 def test_provider_factory_rejects_custom_provider_with_wrong_type(tmp_path, monkeypatch):
@@ -140,7 +172,13 @@ def test_provider_factory_rejects_custom_provider_with_wrong_type(tmp_path, monk
     monkeypatch.syspath_prepend(str(tmp_path))
 
     with pytest.raises(ProviderConfigurationError, match="LLMProvider"):
-        create_provider(Settings(provider="custom", custom_provider_path="bad_provider:bad_provider"))
+        create_provider(
+            Settings(
+                provider="injected",
+                provider_adapter="custom",
+                custom_provider_path="bad_provider:bad_provider",
+            )
+        )
 
 
 def test_provider_factory_loads_custom_provider_from_environment(tmp_path, monkeypatch):
@@ -160,7 +198,8 @@ class EnvProvider(LLMProvider):
         encoding="utf-8",
     )
     monkeypatch.syspath_prepend(str(tmp_path))
-    monkeypatch.setenv("LLM_PROVIDER", "custom")
+    monkeypatch.setenv("LLM_PROVIDER", "injected")
+    monkeypatch.setenv("LLM_PROVIDER_ADAPTER", "custom")
     monkeypatch.setenv("LLM_CUSTOM_PROVIDER", "env_provider:EnvProvider")
 
     provider = create_provider(load_settings())
@@ -199,7 +238,8 @@ class ClassifierProvider(LLMProvider):
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     settings = Settings(
-        provider="custom",
+        provider="injected",
+        provider_adapter="custom",
         model="custom-ticket-classifier",
         custom_provider_path="classifier_provider:ClassifierProvider",
     )

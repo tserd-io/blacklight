@@ -55,7 +55,8 @@ def test_demo_command_runs_mock_workflow_and_prints_next_steps(capsys, tmp_path)
 
 
 def test_demo_command_ignores_live_provider_environment(capsys, monkeypatch, tmp_path):
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_PROVIDER", "injected")
+    monkeypatch.setenv("LLM_PROVIDER_ADAPTER", "openai")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     trace_db_path = tmp_path / "traces.sqlite3"
 
@@ -259,8 +260,8 @@ def test_health_command_prints_runtime_config(capsys):
     assert exit_code == 0
     assert payload["provider"] == "mock"
     assert payload["model"] == "mock-ticket-classifier"
-    assert payload["openai_configured"] is False
-    assert payload["custom_provider_configured"] is False
+    assert payload["provider_key_configured"] is False
+    assert payload["custom_adapter_configured"] is False
     assert payload["ollama_base_url"] == "http://localhost:11434"
     assert payload["provider_timeout_seconds"] == 30.0
     assert payload["provider_max_retries"] == 2
@@ -279,8 +280,8 @@ def test_providers_list_command_prints_mock_safe_configuration(capsys):
     assert providers["mock"]["configured"] is True
     assert providers["mock"]["selected"] is True
     assert providers["mock"]["requires_secret"] is False
-    assert providers["openai"]["configured"] is False
-    assert providers["openai"]["requires_secret"] is True
+    assert providers["hosted"]["configured"] is False
+    assert providers["hosted"]["requires_secret"] is True
     assert providers["custom"]["configured"] is False
 
 
@@ -295,7 +296,7 @@ def test_providers_status_command_prints_runtime_readiness(capsys, monkeypatch):
     assert payload["runtime"]["provider"] == "mock"
     assert payload["providers"]["mock"]["ready"] is True
     assert payload["providers"]["mock"]["selected"] is True
-    assert payload["providers"]["openai"]["ready"] is False
+    assert payload["providers"]["hosted"]["ready"] is False
     assert payload["providers"]["custom"]["ready"] is False
     assert payload["local_model"]["runtime"] == "ollama"
     assert payload["local_model"]["status"] == "unavailable"
@@ -504,7 +505,8 @@ def test_agents_demo_command_runs_deterministic_mock_agent(
     tmp_path,
 ):
     trace_db_path = tmp_path / "agent-demo.sqlite3"
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_PROVIDER", "injected")
+    monkeypatch.setenv("LLM_PROVIDER_ADAPTER", "openai")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     exit_code = main(
@@ -886,7 +888,8 @@ def test_classify_configuration_error_returns_actionable_cli_error(
     monkeypatch,
     tmp_path,
 ):
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_PROVIDER", "injected")
+    monkeypatch.setenv("LLM_PROVIDER_ADAPTER", "openai")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     exit_code = main(

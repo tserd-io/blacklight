@@ -70,7 +70,7 @@ Milestone 5 is complete as a self-explaining console and guided-demo pass. The p
 - app-managed `user.env` settings updates that stay separate from private operator-owned `.env` files
 - final QA checks for linting, tests, guided demo smoke, seeded demo smoke, console API path coverage, and CLI-equivalent command parsing
 
-Milestone 5 final QA was run on July 5, 2026. The smoke path confirmed the default `mock` provider works with `openai_configured=false` and no live provider key.
+Milestone 5 final QA was run on July 5, 2026. The smoke path confirmed the default `mock` provider works with `provider_key_configured=false` and no live provider key.
 
 ## Milestone 6 Completion
 
@@ -96,7 +96,7 @@ Milestone 7 is complete as a managed-agent foundation pass. The project now supp
 - documentation for workflow vs agent vs future graph node, domain/range contracts, traceability, graph-readiness, non-goals, and safety constraints
 - final QA checks for linting, tests, agent CLI smoke, agent API smoke, console profile smoke, docs accuracy, and no-live-key default behavior
 
-Milestone 7 final QA was run on July 8, 2026. The smoke path confirmed managed-agent inspection works in mock mode with `openai_configured=false` and no live provider key.
+Milestone 7 final QA was run on July 8, 2026. The smoke path confirmed managed-agent inspection works in mock mode with `provider_key_configured=false` and no live provider key.
 
 ## Milestone 8 Completion
 

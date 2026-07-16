@@ -47,7 +47,8 @@ def test_local_model_status_ready_when_ollama_lists_selected_model(monkeypatch):
     monkeypatch.setattr("blacklight.local_models.urlrequest.urlopen", fake_urlopen)
     status = local_model_status(
         Settings(
-            provider="custom",
+            provider="injected",
+            provider_adapter="custom",
             model="llama3.1",
             custom_provider_path=OLLAMA_PROVIDER_PATH,
         )
@@ -74,7 +75,8 @@ def test_local_model_status_can_show_ready_fallback_without_selecting_it(monkeyp
     assert status["selected"] is False
     assert status["ready"] is True
     assert status["fallback"]["configured"] is True
-    assert "Set LLM_PROVIDER=custom" in status["status_message"]
+    assert "Set LLM_PROVIDER=injected" in status["status_message"]
+    assert "LLM_PROVIDER_ADAPTER=custom" in status["status_message"]
 
 
 def test_local_model_status_loading_when_ollama_times_out(monkeypatch):
@@ -84,7 +86,8 @@ def test_local_model_status_loading_when_ollama_times_out(monkeypatch):
     monkeypatch.setattr("blacklight.local_models.urlrequest.urlopen", fake_urlopen)
     status = local_model_status(
         Settings(
-            provider="custom",
+            provider="injected",
+            provider_adapter="custom",
             model="llama3.1",
             custom_provider_path=OLLAMA_PROVIDER_PATH,
         )

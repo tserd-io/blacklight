@@ -862,24 +862,36 @@ def _eval_run_payload(run: dict[str, Any]) -> dict[str, Any]:
 
 def _provider_payload(provider: str) -> dict[str, Any]:
     provider = provider.lower()
-    if provider not in {"mock", "openai", "custom"}:
+    if provider not in {"mock", "hosted", "custom"}:
         raise HTTPException(status_code=404, detail=f"Provider not found: {provider}")
+    active = (
+        settings.provider == "mock"
+        if provider == "mock"
+        else settings.provider == "injected" and settings.provider_adapter == _provider_adapter(provider)
+    )
     configured = {
         "mock": True,
-        "openai": bool(settings.openai_api_key),
+        "hosted": bool(settings.openai_api_key),
         "custom": bool(settings.custom_provider_path),
     }[provider]
     payload = {
         "provider": provider,
-        "active": settings.provider == provider,
+        "active": active,
         "configured": configured,
         "ready": configured,
         "requires_live_credentials": provider != "mock",
-        "model": settings.model if settings.provider == provider else None,
+        "model": settings.model if active else None,
         "configuration_hint": {
-            "mock": "Ready by default for demos and tests.",
-            "openai": "Set LLM_PROVIDER=openai and OPENAI_API_KEY, LLM_API_KEY, or API_KEY.",
-            "custom": "Set LLM_PROVIDER=custom and LLM_CUSTOM_PROVIDER to an import path.",
+            "mock": "Ready by default for deterministic demos and tests.",
+            "hosted": (
+                "Injected hosted adapter example. Set LLM_PROVIDER=injected, "
+                "LLM_PROVIDER_ADAPTER=openai, and OPENAI_API_KEY, LLM_API_KEY, or API_KEY."
+            ),
+            "custom": (
+                "Injected adapter path for local, hosted, or private providers. "
+                "Set LLM_PROVIDER=injected, LLM_PROVIDER_ADAPTER=custom, and "
+                "LLM_CUSTOM_PROVIDER to an import path."
+            ),
         }[provider],
     }
     payload.update(
@@ -890,6 +902,10 @@ def _provider_payload(provider: str) -> dict[str, Any]:
         )
     )
     return payload
+
+
+def _provider_adapter(provider: str) -> str:
+    return "openai" if provider == "hosted" else provider
 
 
 def _local_model_payload() -> dict[str, Any]:
@@ -911,10 +927,10 @@ def _local_model_payload() -> dict[str, Any]:
 def _first_run_mode_payloads() -> list[dict[str, Any]]:
     provider_status = {
         item["provider"]: item
-        for item in [_provider_payload(provider) for provider in ["mock", "openai", "custom"]]
+        for item in [_provider_payload(provider) for provider in ["mock", "hosted", "custom"]]
     }
     local_model = _local_model_payload()
-    hosted_ready = provider_status["openai"]["configured"]
+    hosted_ready = provider_status["hosted"]["configured"]
     local_ready = bool(local_model["ready"] or local_model["fallback"]["configured"])
     return [
         {
@@ -928,6 +944,8 @@ def _first_run_mode_payloads() -> list[dict[str, Any]]:
             },
             "settings": {
                 "LLM_PROVIDER": "mock",
+                "LLM_PROVIDER_ADAPTER": None,
+                "LLM_PROVIDER_NAME": "mock",
                 "LLM_MODEL": "mock-ticket-classifier",
             },
             "ready": True,
@@ -944,8 +962,15 @@ def _first_run_mode_payloads() -> list[dict[str, Any]]:
                 "quality": "Usually the strongest first production option.",
             },
             "settings": {
-                "LLM_PROVIDER": "openai",
-                "LLM_MODEL": settings.model if settings.provider == "openai" else "gpt-4o-mini",
+                "LLM_PROVIDER": "injected",
+                "LLM_PROVIDER_ADAPTER": "openai",
+                "LLM_PROVIDER_NAME": "hosted",
+                "LLM_MODEL": (
+                    settings.model
+                    if settings.provider == "injected"
+                    and settings.provider_adapter == "openai"
+                    else "gpt-4o-mini"
+                ),
             },
             "ready": hosted_ready,
             "readiness_label": "Ready" if hosted_ready else "Needs private provider key",
@@ -965,7 +990,9 @@ def _first_run_mode_payloads() -> list[dict[str, Any]]:
                 "quality": "Depends on the selected local model and available hardware.",
             },
             "settings": {
-                "LLM_PROVIDER": "custom",
+                "LLM_PROVIDER": "injected",
+                "LLM_PROVIDER_ADAPTER": "custom",
+                "LLM_PROVIDER_NAME": "ollama",
                 "LLM_CUSTOM_PROVIDER": OLLAMA_PROVIDER_PATH,
                 "LLM_MODEL": DEFAULT_LOCAL_MODEL,
                 "OLLAMA_BASE_URL": local_model["base_url"] or DEFAULT_OLLAMA_BASE_URL,
@@ -1006,21 +1033,27 @@ def _first_run_payload() -> dict[str, Any]:
     return payload
 
 
-def _first_run_updates(request: ConsoleFirstRunSetupRequest) -> dict[str, str]:
+def _first_run_updates(request: ConsoleFirstRunSetupRequest) -> dict[str, Any]:
     mode = request.mode
     if mode == "demo":
         return {
             "LLM_PROVIDER": "mock",
+            "LLM_PROVIDER_ADAPTER": None,
+            "LLM_PROVIDER_NAME": "mock",
             "LLM_MODEL": "mock-ticket-classifier",
         }
     if mode == "hosted_provider":
         return {
-            "LLM_PROVIDER": "openai",
+            "LLM_PROVIDER": "injected",
+            "LLM_PROVIDER_ADAPTER": "openai",
+            "LLM_PROVIDER_NAME": "hosted",
             "LLM_MODEL": request.model or "gpt-4o-mini",
         }
     if mode == "local_model":
         return {
-            "LLM_PROVIDER": "custom",
+            "LLM_PROVIDER": "injected",
+            "LLM_PROVIDER_ADAPTER": "custom",
+            "LLM_PROVIDER_NAME": "ollama",
             "LLM_CUSTOM_PROVIDER": OLLAMA_PROVIDER_PATH,
             "LLM_MODEL": request.model or DEFAULT_LOCAL_MODEL,
             "OLLAMA_BASE_URL": request.ollama_base_url or DEFAULT_OLLAMA_BASE_URL,
@@ -1033,7 +1066,14 @@ def _first_run_updates(request: ConsoleFirstRunSetupRequest) -> dict[str, str]:
 
 def _editable_settings_catalog() -> list[dict[str, Any]]:
     definitions = {
-        "LLM_PROVIDER": ("Provider", "provider", "select", ["mock", "openai", "custom"]),
+        "LLM_PROVIDER": ("Provider mode", "provider", "select", ["mock", "injected"]),
+        "LLM_PROVIDER_ADAPTER": (
+            "Injected provider adapter",
+            "provider",
+            "select",
+            ["openai", "custom"],
+        ),
+        "LLM_PROVIDER_NAME": ("Provider display name", "provider", "text", None),
         "LLM_MODEL": ("Model", "provider", "text", None),
         "TRACE_DB_PATH": ("Trace database path", "storage", "text", None),
         "LLM_CUSTOM_PROVIDER": ("Custom provider import path", "provider", "text", None),
@@ -1113,10 +1153,12 @@ def _settings_payload() -> dict[str, Any]:
     user_env = load_user_env()
     payload = {
         "provider": settings.provider,
+        "provider_adapter": settings.provider_adapter,
+        "provider_name": settings.provider_name,
         "model": settings.model,
         "trace_db_path": settings.trace_db_path,
-        "openai_configured": bool(settings.openai_api_key),
-        "custom_provider_configured": bool(settings.custom_provider_path),
+        "provider_key_configured": bool(settings.openai_api_key),
+        "custom_adapter_configured": bool(settings.custom_provider_path),
         "ollama_base_url": settings.ollama_base_url,
         "provider_timeout_seconds": settings.provider_timeout_seconds,
         "provider_max_retries": settings.provider_max_retries,
@@ -1143,7 +1185,7 @@ def _dashboard_payload(limit: int = 5) -> dict[str, Any]:
         ],
         "review_queue": review_payload["summary"],
         "workflows": [_workflow_payload()],
-        "providers": [_provider_payload(provider) for provider in ["mock", "openai", "custom"]],
+        "providers": [_provider_payload(provider) for provider in ["mock", "hosted", "custom"]],
         "local_model": _local_model_payload(),
         "first_run": _first_run_payload(),
         "settings": _settings_payload(),
@@ -1226,7 +1268,7 @@ def _render_console_first_run() -> HTMLResponse:
         settings_rows = "".join(
             (
                 f'<tr><td data-label="Setting">{escape(key)}</td>'
-                f'<td data-label="Value"><code>{escape(value)}</code></td></tr>'
+                f'<td data-label="Value"><code>{escape("" if value is None else str(value))}</code></td></tr>'
             )
             for key, value in mode["settings"].items()
         )
@@ -1678,7 +1720,7 @@ def _render_console_providers() -> HTMLResponse:
 <section class="grid">
   <div class="panel"><h2>Provider</h2><div class="metric">{escape(settings.provider)}</div></div>
   <div class="panel"><h2>Model</h2><div class="metric">{escape(settings.model)}</div></div>
-  <div class="panel"><h2>OpenAI Key</h2><div class="metric">{escape(str(bool(settings.openai_api_key)))}</div></div>
+  <div class="panel"><h2>Provider Key</h2><div class="metric">{escape(str(bool(settings.openai_api_key)))}</div></div>
   <div class="panel"><h2>Custom Provider</h2><div class="metric">{escape(str(bool(settings.custom_provider_path)))}</div></div>
   <div class="panel"><h2>Local Model</h2><p><span class="status {escape(str(local_model['status']))}">{escape(str(local_model['status']))}</span></p><p><a href="/console/local-model">Inspect local model readiness</a></p></div>
   {_console_command_panel("blacklight health")}
@@ -2482,7 +2524,7 @@ def console_prompt_json(
 @app.get("/api/console/providers")
 def console_providers_json() -> dict[str, Any]:
     payload = {
-        "providers": [_provider_payload(provider) for provider in ["mock", "openai", "custom"]],
+        "providers": [_provider_payload(provider) for provider in ["mock", "hosted", "custom"]],
         "local_model": _local_model_payload(),
         "active_provider": settings.provider,
     }

@@ -110,7 +110,7 @@ Confirmed behavior:
 - First-run guided demo works in mock mode.
 - Seeded demo state creates linked workflow runs, traces, eval cases, and prompt versions.
 - Dashboard, workflow, run, trace, eval, prompt, provider, review queue, and settings API payloads expose copy-friendly CLI equivalents.
-- No live provider key is required for the default console/demo path; `blacklight health` reported `provider=mock`, `openai_configured=false`, and `custom_provider_configured=false`.
+- No live provider key is required for the default console/demo path; `blacklight health` reported `provider=mock`, `provider_key_configured=false`, and `custom_adapter_configured=false`.
 
 Documented limitation:
 
@@ -165,7 +165,7 @@ Confirmed behavior:
 - API profile payload exposes domain, `governed_range`, related workflow, prompt versions, eval links, trace links, review policy, domain-to-range trace contract, and CLI commands.
 - Console profile surfaces link to prompts, evals, traces, review queue, workflows, and demo run.
 - Docs explain workflow vs managed agent vs future graph node, inspectable-before-editable design, graph-readiness, non-goals, and safety constraints.
-- Default runtime remains `provider=mock`, with `openai_configured=false` and no live provider key required.
+- Default runtime remains `provider=mock`, with `provider_key_configured=false` and no live provider key required.
 
 Documented limitation:
 
@@ -187,9 +187,9 @@ Passed checks:
 - FastAPI TestClient smoke check for `/console/agents`
 - FastAPI TestClient smoke check for `POST /console/agents/ticket_classifier_agent/run`
 - opt-in live OpenAI provider smoke with `RUN_OPENAI_PROVIDER_SMOKE=1`, `LLM_MODEL=gpt-4o-mini`, and a private API key loaded from `.env`
-- live OpenAI managed-agent run with `LLM_PROVIDER=openai`, `LLM_MODEL=gpt-4o-mini`, and structured output against `ticket_classifier_agent`
+- live hosted-provider managed-agent run with `LLM_PROVIDER=injected`, `LLM_PROVIDER_ADAPTER=openai`, `LLM_MODEL=gpt-4o-mini`, and structured output against `ticket_classifier_agent`
 - opt-in live Ollama provider smoke with `RUN_OLLAMA_PROVIDER_SMOKE=1`, `OLLAMA_BASE_URL=http://localhost:11434`, and `LLM_MODEL=llama3.1:8b`
-- live Ollama managed-agent run with `LLM_PROVIDER=custom`, `LLM_CUSTOM_PROVIDER=blacklight.providers.ollama_provider:OllamaProvider`, and trace inspection through `blacklight trace show`
+- live Ollama managed-agent run with `LLM_PROVIDER=injected`, `LLM_PROVIDER_ADAPTER=custom`, `LLM_CUSTOM_PROVIDER=blacklight.providers.ollama_provider:OllamaProvider`, and trace inspection through `blacklight trace show`
 
 Confirmed behavior:
 

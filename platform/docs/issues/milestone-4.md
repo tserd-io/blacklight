@@ -215,7 +215,7 @@ Tasks:
 Acceptance criteria:
 
 - A developer can start Ollama from repo instructions.
-- A developer can configure `LLM_PROVIDER=custom` and use the bundled Ollama adapter.
+- A developer can configure `LLM_PROVIDER=injected`, `LLM_PROVIDER_ADAPTER=custom`, and use the bundled Ollama adapter.
 - No default tests, CI jobs, Docker API smoke checks, or quickstart commands require Ollama.
 - The docs explain how local Ollama differs from hosted APIs, local fallback, and mock mode.
 - The issue can be extended later into real local-endpoint smoke tests with explicit environment flags.
