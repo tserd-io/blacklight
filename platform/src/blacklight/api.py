@@ -40,6 +40,7 @@ from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.reviews import ReviewDecisionStore
 from blacklight.observability.storage import TraceStore
+from blacklight.provider_readiness import provider_health_payload
 from blacklight.providers.factory import ProviderConfigurationError, create_provider
 from blacklight.providers.mock import MockProvider
 from blacklight.providers.reliability import ProviderCallError
@@ -1152,18 +1153,7 @@ def _reload_runtime_settings() -> None:
 def _settings_payload() -> dict[str, Any]:
     user_env = load_user_env()
     payload = {
-        "provider": settings.provider,
-        "provider_adapter": settings.provider_adapter,
-        "provider_name": settings.provider_name,
-        "model": settings.model,
-        "trace_db_path": settings.trace_db_path,
-        "provider_key_configured": bool(settings.openai_api_key),
-        "custom_adapter_configured": bool(settings.custom_provider_path),
-        "ollama_base_url": settings.ollama_base_url,
-        "provider_timeout_seconds": settings.provider_timeout_seconds,
-        "provider_max_retries": settings.provider_max_retries,
-        "provider_rate_limit_requests": settings.provider_rate_limit_requests,
-        "provider_rate_limit_window_seconds": settings.provider_rate_limit_window_seconds,
+        **provider_health_payload(settings),
         "editable_file": str(get_user_env_path()),
         "private_env_file": ".env is treated as operator-owned and is never edited by the app.",
         "restart_required": False,

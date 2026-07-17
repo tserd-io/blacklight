@@ -7,6 +7,9 @@ from typing import Literal
 from blacklight.providers.base import LLMProvider
 from blacklight.providers.factory import create_provider
 from blacklight.providers.mock import MockProvider
+from blacklight.sdk.evals import EvalClient
+from blacklight.sdk.providers import ProviderClient
+from blacklight.sdk.traces import TraceClient
 from blacklight.sdk.workflows import WorkflowClient
 from blacklight.settings import Settings, load_settings
 
@@ -97,3 +100,19 @@ class Blacklight:
     @property
     def workflows(self) -> WorkflowClient:
         return WorkflowClient(provider=self._provider, settings=self._settings)
+
+    @property
+    def traces(self) -> TraceClient:
+        return TraceClient(settings=self._settings)
+
+    @property
+    def evals(self) -> EvalClient:
+        return EvalClient(
+            provider=self._provider,
+            settings=self._settings,
+            provider_source=self._provider_source,
+        )
+
+    @property
+    def providers(self) -> ProviderClient:
+        return ProviderClient(settings=self._settings)

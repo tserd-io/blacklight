@@ -33,6 +33,11 @@ from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.evaluations import EvalMetricStore
 from blacklight.observability.idempotency import IdempotencyStore
 from blacklight.observability.storage import TraceStore
+from blacklight.provider_readiness import (
+    provider_health_payload,
+    provider_list_payload,
+    provider_status_payload,
+)
 from blacklight.prompts.registry import PromptRegistry
 from blacklight.providers.factory import create_provider
 from blacklight.providers.mock import MockProvider
@@ -275,110 +280,22 @@ def health(_args: argparse.Namespace) -> int:
 
 
 def _health_payload(settings: Any) -> dict[str, Any]:
-    return {
-        "provider": settings.provider,
-        "provider_adapter": settings.provider_adapter,
-        "provider_name": settings.provider_name,
-        "model": settings.model,
-        "trace_db_path": settings.trace_db_path,
-        "provider_key_configured": bool(settings.openai_api_key),
-        "custom_adapter_configured": bool(settings.custom_provider_path),
-        "ollama_base_url": settings.ollama_base_url,
-        "provider_timeout_seconds": settings.provider_timeout_seconds,
-        "provider_max_retries": settings.provider_max_retries,
-        "provider_rate_limit_requests": settings.provider_rate_limit_requests,
-        "provider_rate_limit_window_seconds": settings.provider_rate_limit_window_seconds,
-    }
+    return provider_health_payload(settings)
 
 
 def providers_list(_args: argparse.Namespace) -> int:
     settings = load_settings()
-    _print_json(
-        {
-            "active_provider": settings.provider,
-            "providers": [
-                {
-                    "name": "mock",
-                    "configured": True,
-                    "selected": settings.provider == "mock",
-                    "requires_secret": False,
-                    "summary": "Deterministic demo mode for learning features, tests, and CI.",
-                },
-                {
-                    "name": "hosted",
-                    "configured": bool(settings.openai_api_key),
-                    "selected": (
-                        settings.provider == "injected"
-                        and settings.provider_adapter == "openai"
-                    ),
-                    "requires_secret": True,
-                    "summary": "Injected hosted adapter example using a private provider key.",
-                },
-                {
-                    "name": "custom",
-                    "configured": bool(settings.custom_provider_path),
-                    "selected": (
-                        settings.provider == "injected"
-                        and settings.provider_adapter == "custom"
-                    ),
-                    "requires_secret": False,
-                    "summary": "Injected adapter path for local, hosted, or private user-owned providers.",
-                },
-            ],
-        }
-    )
+    _print_json(provider_list_payload(settings))
     return 0
 
 
 def providers_status(_args: argparse.Namespace) -> int:
     settings = load_settings()
-    local_status = local_model_status(settings).as_dict()
     _print_json(
-        {
-            "runtime": _health_payload(settings),
-            "providers": {
-                "mock": {
-                    "configured": True,
-                    "ready": True,
-                    "selected": settings.provider == "mock",
-                    "message": "Mock demonstration mode is ready without live credentials.",
-                },
-                "hosted": {
-                    "configured": bool(settings.openai_api_key),
-                    "ready": bool(settings.openai_api_key),
-                    "selected": (
-                        settings.provider == "injected"
-                        and settings.provider_adapter == "openai"
-                    ),
-                    "message": (
-                        "Injected hosted adapter key is available."
-                        if settings.openai_api_key
-                        else "The hosted adapter requires OPENAI_API_KEY, LLM_API_KEY, or API_KEY in a private environment."
-                    ),
-                },
-                "custom": {
-                    "configured": bool(settings.custom_provider_path),
-                    "ready": bool(settings.custom_provider_path),
-                    "selected": (
-                        settings.provider == "injected"
-                        and settings.provider_adapter == "custom"
-                    ),
-                    "message": (
-                        "Injected provider import path is available."
-                        if settings.custom_provider_path
-                        else "Injected provider adapters require LLM_CUSTOM_PROVIDER."
-                    ),
-                },
-            },
-            "local_model": {
-                "runtime": local_status["runtime"],
-                "configured": local_status["configured"],
-                "selected": local_status["selected"],
-                "status": local_status["status"],
-                "ready": local_status["ready"],
-                "message": local_status["status_message"],
-            },
-        }
+        provider_status_payload(
+            settings,
+            compact_local_model=True,
+        )
     )
     return 0
 
