@@ -74,6 +74,49 @@ result = client.workflows.run(
 )
 ```
 
+After a workflow runs, inspect traces without leaving Python:
+
+```python
+trace = client.traces.show(result.trace_id)
+
+print(trace.trace["provider"])
+print(trace.eval_evidence["suite_name"])
+```
+
+Run and inspect eval evidence from the same SDK client:
+
+```python
+eval_result = client.evals.run(session_id="demo-eval")
+eval_run_id = eval_result.report["eval_run_id"]
+
+print(client.evals.list().eval_runs)
+print(client.evals.show(eval_run_id).eval_run["summary"])
+```
+
+Prompt-version comparison uses fresh mock providers automatically in mock mode.
+Injected providers must supply a factory so baseline and candidate runs do not
+share mutable provider state:
+
+```python
+comparison = client.evals.compare(
+    baseline_version=1,
+    candidate_version=2,
+    provider_factory=MyProvider,
+)
+```
+
+Provider readiness is also available through the SDK:
+
+```python
+print(client.providers.health().model)
+print(client.providers.status().providers["mock"]["ready"])
+print(client.providers.status(include_local_probe=False).local_model["status"])
+```
+
+`client.providers.status()` probes the configured local model endpoint by
+default. Use `include_local_probe=False` when a host application only wants a
+cheap configuration snapshot.
+
 ## Construction Paths
 
 Use mock mode when examples, tests, or embedded demos should run without setup:
@@ -118,8 +161,8 @@ settings in `user.env`.
 
 ## Current Public Surface
 
-The SDK facade exposes stable construction, metadata, and the ticket-classifier
-workflow runner:
+The SDK facade exposes stable construction, metadata, workflow execution, and
+inspection clients:
 
 - `Blacklight.mock(...)`
 - `Blacklight.from_settings(...)`
@@ -131,6 +174,15 @@ workflow runner:
 - `client.workflows.list()`
 - `client.workflows.run_ticket_classifier(...)`
 - `client.workflows.run("ticket_classifier", input=...)`
+- `client.traces.list(...)`
+- `client.traces.show(trace_id)`
+- `client.evals.run(...)`
+- `client.evals.list(...)`
+- `client.evals.show(eval_run_id)`
+- `client.evals.compare(...)`
+- `client.providers.health()`
+- `client.providers.list()`
+- `client.providers.status()`
 
 Workflow results are typed Pydantic models. They can be serialized with
 `result.model_dump(mode="json")` and include:
@@ -146,6 +198,10 @@ Workflow results are typed Pydantic models. They can be serialized with
 - latency
 - token counts and estimated cost where available
 
+Trace and eval lookups raise `SDKNotFoundError` when the requested trace or eval
+run is not present in the configured trace database. This keeps missing evidence
+distinct from a successful empty result.
+
 `provider_source` explains how the provider entered Blacklight:
 
 - `mock`: deterministic demo/test mode
@@ -158,7 +214,7 @@ Workflow results are typed Pydantic models. They can be serialized with
 mistaking a user-owned provider name for a value that the settings factory knows
 how to construct.
 
-Trace, eval, provider-status, and managed-agent clients are planned in later
-Milestone 9 issues. Until those land, applications should treat
-`blacklight.sdk.Blacklight` as the stable construction root and use the typed
-workflow result instead of reaching through it to internal storage helpers.
+Managed-agent clients are planned in later Milestone 9 issues. Until those land,
+applications should treat `blacklight.sdk.Blacklight` as the stable construction
+root and use the typed workflow result instead of reaching through it to
+internal storage helpers.

@@ -12,7 +12,7 @@ from blacklight.providers.base import LLMProvider
 from blacklight.providers.mock import MockProvider
 from blacklight.sdk import client as sdk_client
 from blacklight.sdk import workflows as sdk_workflows
-from blacklight.sdk import Blacklight
+from blacklight.sdk import Blacklight, SDKNotFoundError
 from blacklight.settings import Settings
 
 
@@ -365,3 +365,124 @@ def test_blacklight_workflow_returns_failed_result_for_storage_setup_failure(
     assert result.error.category == "storage_error"
     assert "trace database" in result.error.likely_cause
     assert "TRACE_DB_PATH" in result.error.next_step
+
+
+def test_blacklight_traces_list_and_show_workflow_trace(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "trace-client.sqlite3")
+    workflow = client.workflows.run_ticket_classifier(
+        subject="Invoice refund request",
+        body="The customer was charged twice and needs a refund.",
+        session_id="sdk-trace-session",
+    )
+
+    traces = client.traces.list(limit=5)
+    detail = client.traces.show(workflow.trace_id)
+
+    assert [trace["request_id"] for trace in traces.traces] == [workflow.trace_id]
+    assert detail.trace["request_id"] == workflow.trace_id
+    assert detail.trace["session_id"] == "sdk-trace-session"
+    assert detail.eval_evidence["prompt_id"] == TicketClassifier.prompt_id
+    assert detail.eval_evidence["linked"] is False
+
+
+def test_blacklight_traces_show_missing_trace_raises_typed_error(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "missing-trace.sqlite3")
+
+    with pytest.raises(SDKNotFoundError, match="Trace not found"):
+        client.traces.show("missing-trace")
+
+
+def test_blacklight_evals_run_list_and_show_mock_mode(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "eval-client.sqlite3")
+
+    run = client.evals.run(session_id="sdk-eval", eval_run_id="sdk-eval-run")
+    runs = client.evals.list(limit=5)
+    detail = client.evals.show("sdk-eval-run")
+
+    assert run.report["eval_run_id"] == "sdk-eval-run"
+    assert run.report["session_id"] == "sdk-eval"
+    assert run.report["summary"]["case_count"] > 0
+    assert [item["eval_run_id"] for item in runs.eval_runs] == ["sdk-eval-run"]
+    assert detail.eval_run["eval_run_id"] == "sdk-eval-run"
+    assert len(detail.eval_run["cases"]) == run.report["summary"]["case_count"]
+    assert len(detail.traces) == run.report["summary"]["case_count"]
+    assert detail.traces[0]["eval_evidence"]["linked"] is True
+    assert detail.traces[0]["eval_evidence"]["eval_run_id"] == "sdk-eval-run"
+
+
+def test_blacklight_evals_show_missing_eval_raises_typed_error(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "missing-eval.sqlite3")
+
+    with pytest.raises(SDKNotFoundError, match="Eval run not found"):
+        client.evals.show("missing-eval")
+
+
+def test_blacklight_evals_compare_prompt_versions(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "eval-compare.sqlite3")
+
+    comparison = client.evals.compare(
+        baseline_version=1,
+        candidate_version=2,
+        session_id="sdk-compare",
+    )
+
+    assert comparison.comparison["prompt_id"] == TicketClassifier.prompt_id
+    assert comparison.comparison["baseline"]["prompt_version"] == 1
+    assert comparison.comparison["candidate"]["prompt_version"] == 2
+    assert "accuracy" in comparison.comparison["summary_deltas"]
+
+
+def test_blacklight_evals_compare_requires_factory_for_injected_provider(tmp_path):
+    client = Blacklight.from_provider(
+        MockProvider(),
+        model="mock-ticket-classifier",
+        trace_db_path=tmp_path / "injected-compare.sqlite3",
+    )
+
+    with pytest.raises(ValueError, match="provider_factory"):
+        client.evals.compare(baseline_version=1, candidate_version=2)
+
+
+def test_blacklight_evals_compare_accepts_factory_for_injected_provider(tmp_path):
+    client = Blacklight.from_provider(
+        MockProvider(),
+        model="mock-ticket-classifier",
+        trace_db_path=tmp_path / "factory-compare.sqlite3",
+    )
+
+    comparison = client.evals.compare(
+        baseline_version=1,
+        candidate_version=2,
+        provider_factory=MockProvider,
+    )
+
+    assert comparison.comparison["baseline"]["provider"] == "mock"
+    assert comparison.comparison["candidate"]["provider"] == "mock"
+
+
+def test_blacklight_providers_health_list_and_status(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "providers.sqlite3")
+
+    health = client.providers.health()
+    providers = client.providers.list()
+    status = client.providers.status()
+
+    assert health.provider == "mock"
+    assert health.model == "mock-ticket-classifier"
+    assert health.provider_key_configured is False
+    assert providers.active_provider == "mock"
+    assert providers.providers[0]["name"] == "mock"
+    assert providers.providers[0]["configured"] is True
+    assert status.runtime.provider == "mock"
+    assert status.providers["mock"]["ready"] is True
+    assert "fallback" in status.local_model
+
+
+def test_blacklight_providers_status_can_skip_local_probe(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "providers-no-probe.sqlite3")
+
+    status = client.providers.status(include_local_probe=False)
+
+    assert status.local_model["status"] == "not_probed"
+    assert status.local_model["ready"] is None
+    assert "not probed" in status.local_model["status_message"]
