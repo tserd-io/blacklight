@@ -46,7 +46,7 @@ Blacklight Studio keeps those ideas small enough to read quickly while still run
 - Persisted eval run/case metrics linked back to trace records
 - CLI commands for guided demos, classification, evals, metrics, health, prompts, and traces
 - Managed-agent inspection through CLI, API, and console surfaces, plus a governed CLI run path
-- Public `blacklight.sdk` construction facade for embedding Blacklight in Python applications
+- Public `blacklight.sdk` facade for embedding Blacklight in Python applications and running the ticket-classifier workflow
 - FastAPI surface for the ticket-classification workflow
 
 ## Quick Start

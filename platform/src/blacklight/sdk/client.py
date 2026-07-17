@@ -7,6 +7,7 @@ from typing import Literal
 from blacklight.providers.base import LLMProvider
 from blacklight.providers.factory import create_provider
 from blacklight.providers.mock import MockProvider
+from blacklight.sdk.workflows import WorkflowClient
 from blacklight.settings import Settings, load_settings
 
 ProviderSource = Literal["mock", "injected"]
@@ -92,3 +93,7 @@ class Blacklight:
     @property
     def trace_db_path(self) -> str:
         return self._settings.trace_db_path
+
+    @property
+    def workflows(self) -> WorkflowClient:
+        return WorkflowClient(provider=self._provider, settings=self._settings)

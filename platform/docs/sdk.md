@@ -19,6 +19,61 @@ print(client.trace_db_path)
 mock provider and does not read `.env`, `user.env`, OpenAI credentials, Ollama,
 Docker, or any live provider configuration.
 
+The SDK also exposes workflow execution through `client.workflows`:
+
+```python
+from blacklight.sdk import Blacklight
+
+client = Blacklight.mock(trace_db_path="traces.sqlite3")
+
+result = client.workflows.run_ticket_classifier(
+    subject="Invoice refund request",
+    body="The customer was charged twice and needs a refund.",
+    session_id="demo-session",
+)
+
+print(result.output.category)
+print(result.trace_id)
+print(result.review.state)
+```
+
+For known operational failures, workflow calls return a structured failed result
+with an `error` object that a user-facing application can render directly:
+
+```python
+result = client.workflows.run_ticket_classifier(
+    subject="Invoice refund request",
+    body="The customer was charged twice and needs a refund.",
+)
+
+if result.run_status == "failed" and result.error:
+    print(result.error.message)
+    print(result.error.likely_cause)
+    print(result.error.next_step)
+```
+
+Blacklight keeps a hybrid boundary for SDK ergonomics:
+
+- Provider/runtime/validation failures return `WorkflowResult(run_status="failed")`.
+- Programmer mistakes, such as an unsupported workflow ID or invalid input shape,
+  raise normal Python exceptions.
+- `result.trace` is present when the run reached durable trace writing. If a
+  failure happens before evidence can be written, `result.trace` and
+  `result.trace_id` may be `None`.
+
+Use the generic workflow runner when a host application wants to choose the
+workflow by ID:
+
+```python
+result = client.workflows.run(
+    "ticket_classifier",
+    input={
+        "subject": "Login loop",
+        "body": "The user hits an API error after signing in.",
+    },
+)
+```
+
 ## Construction Paths
 
 Use mock mode when examples, tests, or embedded demos should run without setup:
@@ -63,8 +118,8 @@ settings in `user.env`.
 
 ## Current Public Surface
 
-The initial SDK facade intentionally exposes only stable construction and
-metadata:
+The SDK facade exposes stable construction, metadata, and the ticket-classifier
+workflow runner:
 
 - `Blacklight.mock(...)`
 - `Blacklight.from_settings(...)`
@@ -73,6 +128,23 @@ metadata:
 - `client.provider_name`
 - `client.model`
 - `client.trace_db_path`
+- `client.workflows.list()`
+- `client.workflows.run_ticket_classifier(...)`
+- `client.workflows.run("ticket_classifier", input=...)`
+
+Workflow results are typed Pydantic models. They can be serialized with
+`result.model_dump(mode="json")` and include:
+
+- output
+- trace ID
+- validation result
+- guardrail outcome
+- review state
+- structured error detail for known operational failures
+- provider and model
+- prompt version
+- latency
+- token counts and estimated cost where available
 
 `provider_source` explains how the provider entered Blacklight:
 
@@ -86,7 +158,7 @@ metadata:
 mistaking a user-owned provider name for a value that the settings factory knows
 how to construct.
 
-Workflow, trace, eval, provider-status, and managed-agent clients are planned in
-the later Milestone 9 issues. Until those land, applications should treat
-`blacklight.sdk.Blacklight` as the stable construction root rather than reaching
-through it to internal storage helpers.
+Trace, eval, provider-status, and managed-agent clients are planned in later
+Milestone 9 issues. Until those land, applications should treat
+`blacklight.sdk.Blacklight` as the stable construction root and use the typed
+workflow result instead of reaching through it to internal storage helpers.
