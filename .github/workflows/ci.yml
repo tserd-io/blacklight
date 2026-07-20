@@ -17,7 +17,7 @@ jobs:
         working-directory: platform
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
@@ -38,7 +38,7 @@ jobs:
       TRACE_DB_PATH: .tmp/quickstart-smoke.sqlite3
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install README quickstart dependencies
@@ -66,7 +66,7 @@ jobs:
       OLLAMA_BASE_URL: https://example.com
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install package validation tools
