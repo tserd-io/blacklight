@@ -61,6 +61,7 @@ def trace_domain_to_range_detail(
             },
             "domain": envelope["domain_snapshot"],
             "context": envelope["context_bundle"],
+            "run_context": envelope.get("run_context", {}),
             "provider": envelope["provider_call"],
             "validation": envelope["validation"],
             "guardrails": envelope["guardrail"],

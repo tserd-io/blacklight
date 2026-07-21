@@ -7,6 +7,7 @@ from typing import Literal
 from blacklight.providers.base import LLMProvider
 from blacklight.providers.factory import create_provider
 from blacklight.providers.mock import MockProvider
+from blacklight.sdk.agents import AgentClient
 from blacklight.sdk.evals import EvalClient
 from blacklight.sdk.providers import ProviderClient
 from blacklight.sdk.traces import TraceClient
@@ -116,3 +117,7 @@ class Blacklight:
     @property
     def providers(self) -> ProviderClient:
         return ProviderClient(settings=self._settings)
+
+    @property
+    def agents(self) -> AgentClient:
+        return AgentClient(provider=self._provider, settings=self._settings)

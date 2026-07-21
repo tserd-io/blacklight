@@ -7,12 +7,14 @@ import pytest
 
 from blacklight.examples.ticket_classifier import TicketClassifier
 from blacklight.models import ProviderRequest, ProviderResponse, TicketRequest
+from blacklight.observability.agent_runs import AgentRunStore
 from blacklight.observability.storage import TraceStore
 from blacklight.providers.base import LLMProvider
 from blacklight.providers.mock import MockProvider
+from blacklight.sdk import agents as sdk_agents
 from blacklight.sdk import client as sdk_client
 from blacklight.sdk import workflows as sdk_workflows
-from blacklight.sdk import Blacklight, SDKNotFoundError
+from blacklight.sdk import Blacklight, SDKNotFoundError, TypedError
 from blacklight.settings import Settings
 
 
@@ -365,6 +367,201 @@ def test_blacklight_workflow_returns_failed_result_for_storage_setup_failure(
     assert result.error.category == "storage_error"
     assert "trace database" in result.error.likely_cause
     assert "TRACE_DB_PATH" in result.error.next_step
+
+
+def test_blacklight_agents_list_and_show_ticket_classifier(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "agents.sqlite3")
+
+    agents = client.agents.list()
+    profile = client.agents.show("ticket_classifier_agent")
+
+    assert [agent.agent_id for agent in agents.agents] == ["ticket_classifier_agent"]
+    assert agents.agents[0].workflow_id == "ticket_classifier"
+    assert agents.agents[0].output_schema == "TicketClassification"
+    assert agents.agents[0].prompt_ids == [TicketClassifier.prompt_id]
+    assert profile.agent.agent_id == "ticket_classifier_agent"
+    assert profile.domain["prompt_ids"] == [TicketClassifier.prompt_id]
+    assert profile.governed_range["output_schema"] == "TicketClassification"
+    assert "domain_boundary" in profile.trace_contract["required_steps"]
+
+
+def test_blacklight_agents_show_missing_agent_raises_typed_error(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "missing-agent.sqlite3")
+
+    with pytest.raises(SDKNotFoundError, match="Agent not found"):
+        client.agents.show("missing_agent")
+
+
+def test_blacklight_agents_run_ticket_classifier_persists_agent_run(tmp_path):
+    trace_db_path = tmp_path / "agent-run.sqlite3"
+    client = Blacklight.mock(trace_db_path=trace_db_path)
+
+    result = client.agents.run(
+        "ticket_classifier_agent",
+        input={
+            "subject": "Invoice refund request",
+            "body": "The customer was charged twice and needs a refund.",
+            "session_id": "sdk-agent-session",
+            "context": {"source": "sdk-test"},
+            "insight": "Synthetic billing signal.",
+            "suggested_action": {"queue": "billing"},
+            "final_action": {"status": "not_exported"},
+        },
+    )
+
+    assert result.run_status == "completed"
+    assert result.payload["agent_run"]["agent_id"] == "ticket_classifier_agent"
+    assert result.payload["output"]["category"] == "billing"
+    assert result.payload["trace"]["agent_run_id"] == result.agent_run_id
+    assert result.trace_id == result.envelope["trace_id"]
+    assert result.envelope["domain_snapshot"]["prompt_ids"] == [TicketClassifier.prompt_id]
+    assert result.envelope["range_output"]["output"]["category"] == "billing"
+    assert result.envelope["run_context"]["context"] == {"source": "sdk-test"}
+    assert result.run_context["suggested_action"] == {"queue": "billing"}
+    assert result.domain_to_range is not None
+    assert result.domain_to_range["agent_run"]["agent_run_id"] == result.agent_run_id
+    assert result.domain_to_range["agent_run"]["session_id"] == "sdk-agent-session"
+    assert result.domain_to_range["run_context"]["insight"] == "Synthetic billing signal."
+    assert result.domain_to_range["review"]["state"] == "accepted"
+
+    stored_run = AgentRunStore(trace_db_path).get(result.agent_run_id)
+    assert stored_run is not None
+    assert stored_run["trace_id"] == result.trace_id
+    assert stored_run["session_id"] == "sdk-agent-session"
+    assert stored_run["run_context"]["final_action"] == {"status": "not_exported"}
+
+
+def test_blacklight_agents_run_ticket_classifier_needs_review(tmp_path):
+    client = Blacklight.mock(trace_db_path=tmp_path / "agent-review.sqlite3")
+
+    result = client.agents.run(
+        "ticket_classifier_agent",
+        input={
+            "subject": "Fraud warning",
+            "body": "The customer says their credit card was used without approval.",
+            "session_id": "sdk-agent-review",
+        },
+    )
+
+    assert result.run_status == "completed"
+    assert result.payload["validation"]["passed"] is False
+    assert result.payload["validation"]["guardrail_outcome"] == "needs_review"
+    assert result.payload["review"]["state"] == "needs_review"
+    assert result.envelope["guardrail"]["outcome"] == "needs_review"
+    assert result.envelope["review"]["touch_decision"] == "block_downstream_touch"
+    assert result.domain_to_range is not None
+    assert result.domain_to_range["review"]["state"] == "needs_review"
+
+
+def test_blacklight_agents_run_returns_failed_result_for_guardrail_validation(tmp_path):
+    class InvalidJsonProvider(LLMProvider):
+        name = "invalid-json"
+
+        def complete(self, request: ProviderRequest) -> ProviderResponse:
+            return ProviderResponse(
+                text="not-json",
+                provider=self.name,
+                model=request.model,
+                input_tokens=1,
+                output_tokens=1,
+            )
+
+    client = Blacklight.from_provider(
+        InvalidJsonProvider(),
+        model="invalid-model",
+        trace_db_path=tmp_path / "agent-validation.sqlite3",
+    )
+
+    result = client.agents.run(
+        "ticket_classifier_agent",
+        input={
+            "subject": "Billing question",
+            "body": "Can you explain this payment?",
+        },
+    )
+
+    assert result.run_status == "failed"
+    assert result.error is not None
+    assert isinstance(result.error, TypedError)
+    assert result.error.category == "validation_error"
+    assert result.payload["output"] is None
+    assert result.payload["validation"]["passed"] is False
+    assert result.payload["validation"]["guardrail_outcome"] == "rejected"
+    assert result.envelope["review"]["state"] == "rejected"
+    assert result.domain_to_range is not None
+    assert result.domain_to_range["range"]["output"] is None
+
+
+def test_blacklight_agents_run_returns_failed_result_for_storage_setup_failure(
+    monkeypatch,
+    tmp_path,
+):
+    class BrokenTraceStore:
+        def __init__(self, _db_path: str) -> None:
+            raise sqlite3.OperationalError("unable to open database file")
+
+    monkeypatch.setattr(sdk_agents, "TraceStore", BrokenTraceStore)
+    client = Blacklight.mock(trace_db_path=tmp_path / "missing" / "traces.sqlite3")
+
+    result = client.agents.run(
+        "ticket_classifier_agent",
+        input={
+            "subject": "Billing question",
+            "body": "Can you explain this payment?",
+            "session_id": "sdk-agent-storage",
+            "context": {"source": "storage-test"},
+        },
+    )
+
+    assert result.run_status == "failed"
+    assert result.trace_id is None
+    assert result.envelope is None
+    assert result.domain_to_range is None
+    assert result.run_context == {"context": {"source": "storage-test"}}
+    assert result.payload["run_context"] == {"context": {"source": "storage-test"}}
+    assert result.payload["trace"]["trace_db_path"] == str(
+        tmp_path / "missing" / "traces.sqlite3"
+    )
+    assert result.error is not None
+    assert result.error.category == "storage_error"
+    assert "trace database" in result.error.likely_cause
+    assert result.payload["domain"]["prompt_ids"] == [TicketClassifier.prompt_id]
+    assert result.payload["governed_range"]["output_schema"] == "TicketClassification"
+    assert "domain_boundary" in result.payload["trace_contract"]["required_steps"]
+
+
+def test_blacklight_agents_run_returns_failed_result_for_agent_run_write_failure(
+    monkeypatch,
+    tmp_path,
+):
+    class BrokenAgentRunStore:
+        def __init__(self, _db_path: str) -> None:
+            pass
+
+        def insert(self, _envelope: dict[str, object]) -> None:
+            raise sqlite3.OperationalError("unable to write agent run envelope")
+
+    monkeypatch.setattr(sdk_agents, "AgentRunStore", BrokenAgentRunStore)
+    client = Blacklight.mock(trace_db_path=tmp_path / "agent-run-write.sqlite3")
+
+    result = client.agents.run(
+        "ticket_classifier_agent",
+        input={
+            "subject": "Invoice refund request",
+            "body": "The customer was charged twice and needs a refund.",
+            "session_id": "sdk-agent-write-failure",
+            "insight": "Synthetic billing signal.",
+        },
+    )
+
+    assert result.run_status == "failed"
+    assert result.trace_id is not None
+    assert result.envelope is not None
+    assert result.domain_to_range is not None
+    assert result.domain_to_range["run_context"]["insight"] == "Synthetic billing signal."
+    assert result.payload["trace_envelope"]["trace_id"] == result.trace_id
+    assert result.error is not None
+    assert result.error.category == "storage_error"
 
 
 def test_blacklight_traces_list_and_show_workflow_trace(tmp_path):

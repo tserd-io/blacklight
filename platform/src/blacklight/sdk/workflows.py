@@ -14,21 +14,13 @@ from blacklight.observability.idempotency import IdempotencyInProgressError, Ide
 from blacklight.observability.storage import TraceStore
 from blacklight.providers.base import LLMProvider
 from blacklight.providers.reliability import ProviderCallError
+from blacklight.sdk.errors import TypedError, storage_error_detail
 from blacklight.review import (
     review_reason_for_guardrail_outcome,
     review_routing_decision,
     review_state_for_guardrail_outcome,
 )
 from blacklight.settings import Settings
-
-
-def _storage_error_detail(exc: Exception) -> ErrorDetail:
-    return ErrorDetail(
-        category="storage_error",
-        message=str(exc) or exc.__class__.__name__,
-        likely_cause="Blacklight could not open or write to the configured trace database.",
-        next_step="Check TRACE_DB_PATH, directory permissions, and whether another process is holding the SQLite database open.",
-    )
 
 
 class WorkflowDescriptor(BaseModel):
@@ -60,20 +52,8 @@ class WorkflowTraceSummary(BaseModel):
     trace_db_path: str
 
 
-class WorkflowError(BaseModel):
-    category: str
-    message: str
-    likely_cause: str
-    next_step: str
-
-    @classmethod
-    def from_detail(cls, detail: ErrorDetail) -> WorkflowError:
-        return cls(
-            category=detail.category,
-            message=detail.message,
-            likely_cause=detail.likely_cause,
-            next_step=detail.next_step,
-        )
+class WorkflowError(TypedError):
+    pass
 
 
 class WorkflowResult(BaseModel):
@@ -147,7 +127,7 @@ class WorkflowClient:
         except (OSError, SQLiteError) as exc:
             return self._result_without_trace(
                 workflow_run_id=workflow_run_id,
-                error_detail=_storage_error_detail(exc),
+                error_detail=storage_error_detail(exc),
                 validation_errors=[str(exc) or exc.__class__.__name__],
             )
         classifier = TicketClassifier(
