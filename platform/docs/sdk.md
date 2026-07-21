@@ -60,6 +60,8 @@ Blacklight keeps a hybrid boundary for SDK ergonomics:
 - `result.trace` is present when the run reached durable trace writing. If a
   failure happens before evidence can be written, `result.trace` and
   `result.trace_id` may be `None`.
+- SDK error objects extend `TypedError`, so workflow, agent-run, and future SDK
+  surfaces share `category`, `message`, `likely_cause`, and `next_step`.
 
 Use the generic workflow runner when a host application wants to choose the
 workflow by ID:
@@ -117,6 +119,39 @@ print(client.providers.status(include_local_probe=False).local_model["status"])
 default. Use `include_local_probe=False` when a host application only wants a
 cheap configuration snapshot.
 
+Managed-agent inspection and runs are exposed through `client.agents`:
+
+```python
+agent = client.agents.show("ticket_classifier_agent")
+
+run = client.agents.run(
+    "ticket_classifier_agent",
+    input={
+        "subject": "Invoice refund request",
+        "body": "The customer was charged twice and needs a refund.",
+        "session_id": "demo-session",
+        "context": {"source": "demo"},
+        "suggested_action": {"queue": "billing"},
+    },
+)
+
+print(agent.governed_range["output_schema"])
+print(run.agent_run_id)
+print(run.trace_id)
+print(run.domain_to_range["review"]["state"])
+```
+
+Agent runs return the same durable run envelope used by the CLI and console API.
+They include agent metadata, domain/range snapshots, validation, guardrail,
+review routing, eval evidence, the linked trace ID, and optional `run_context`
+fields such as context, insight, suggested action, and final action.
+
+The `run_context` field is also included in the domain-to-range traceability
+payload. This supports minimum-trust, high-observability chains where one step
+retrieves context, another creates an insight from that context, another drafts
+an action from both, and a final review step decides whether to send, store, or
+route the result for human review.
+
 ## Construction Paths
 
 Use mock mode when examples, tests, or embedded demos should run without setup:
@@ -167,6 +202,7 @@ inspection clients:
 - `Blacklight.mock(...)`
 - `Blacklight.from_settings(...)`
 - `Blacklight.from_provider(...)`
+- `TypedError`
 - `client.provider_source`
 - `client.provider_name`
 - `client.model`
@@ -174,6 +210,9 @@ inspection clients:
 - `client.workflows.list()`
 - `client.workflows.run_ticket_classifier(...)`
 - `client.workflows.run("ticket_classifier", input=...)`
+- `client.agents.list()`
+- `client.agents.show(agent_id)`
+- `client.agents.run(agent_id, input=...)`
 - `client.traces.list(...)`
 - `client.traces.show(trace_id)`
 - `client.evals.run(...)`
@@ -214,7 +253,7 @@ distinct from a successful empty result.
 mistaking a user-owned provider name for a value that the settings factory knows
 how to construct.
 
-Managed-agent clients are planned in later Milestone 9 issues. Until those land,
-applications should treat `blacklight.sdk.Blacklight` as the stable construction
-root and use the typed workflow result instead of reaching through it to
-internal storage helpers.
+Managed-agent run results are typed Pydantic models. They can be serialized with
+`run.model_dump(mode="json")` and are intended for applications that need to
+show a non-technical user what happened from session, to agent run, to trace, to
+review/eval evidence without reaching into internal storage helpers.
